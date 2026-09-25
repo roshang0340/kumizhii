@@ -106,7 +106,7 @@ app.put("/api/admin/settings", adminOnly, async (req, res) => {
   try {
     const enabled = Boolean(req.body?.aiEnabled);
     await db.execute({
-      sql: "INSERT INTO settings(key,value) VALUES('ai_enabled',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      sql: "INSERT OR REPLACE INTO settings(key,value) VALUES('ai_enabled',?)",
       args: [String(enabled)]
     });
     res.json({ aiEnabled: enabled });
@@ -262,25 +262,38 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
     
     let text = "";
     if (openaiKey) {
-      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
-        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.7 })
-      });
-      const data = await response.json();
-      if (!response.ok) return res.status(502).json({ error: data.error?.message || "OpenAI request failed." });
-      text = data.choices?.[0]?.message?.content?.trim() || "";
-    } else {
+      try {
+        const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.7 })
+        });
+        const data = await response.json();
+        if (response.ok && data.choices?.[0]?.message?.content) {
+          text = data.choices[0].message.content.trim();
+        }
+      } catch (err) {
+        console.error("OpenAI error, falling back to Gemini:", err);
+      }
+    }
+
+    if (!text && geminiKey) {
       const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       });
       const data = await response.json();
-      if (!response.ok) return res.status(502).json({ error: data.error?.message || "Gemini request failed." });
-      text = data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim() || "";
+      if (response.ok && data.candidates?.[0]?.content?.parts) {
+        text = data.candidates[0].content.parts.map(p => p.text || "").join("").trim();
+      }
     }
+
+    if (!text) {
+      return res.status(502).json({ error: "AI request failed. Check OPENAI_API_KEY / GEMINI_API_KEY in Vercel." });
+    }
+
     const newline = text.indexOf("\n");
     res.json({ title: newline > 0 ? text.slice(0, newline).replace(/^#+\s*/, "").replace(/[*_]/g, "") : "இன்றைய சிந்தனை", content: newline > 0 ? text.slice(newline + 1).trim() : text });
   } catch (err) {
