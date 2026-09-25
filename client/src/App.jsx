@@ -299,7 +299,7 @@ function App() {
       </header>
 
       {page === "home" && <main>
-        <section className="hero">
+        <section className="hero" style={{ backgroundImage: `linear-gradient(180deg,rgba(17,27,50,.35),rgba(17,27,50,.92)),url("${resolveImg(post?.image_url || "/archive-illustration.jpeg")}")`, backgroundSize: "cover", backgroundPosition: "center" }}>
           <div className="hero-glow"></div>
           <div className="eyebrow"><span className="live-dot"></span> A LITTLE SOMETHING FOR TODAY</div>
           <div className="hero-copy">
@@ -314,7 +314,6 @@ function App() {
             )}
             <button className="text-button" onClick={() => document.getElementById("reader-note")?.scrollIntoView({ behavior: "smooth" })}>Leave a note <ArrowDown size={16}/></button>
           </div>
-          <div className="hero-image" style={{ backgroundImage: `linear-gradient(90deg,rgba(17,27,50,.15),rgba(17,27,50,.05)),url("${resolveImg(post?.image_url || "/archive-illustration.jpeg")}")` }} />
           <div className="hero-index">01 <span>/ THE DAILY PAGE</span></div>
         </section>
         <section className="note-section" id="reader-note">
