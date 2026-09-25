@@ -284,10 +284,16 @@ function App() {
             <label>Title<input value={title} onChange={e => setTitle(e.target.value)} placeholder="Give this entry a title" required/></label>
             <label>Your content<textarea className="content-input" value={content} onChange={e => setContent(e.target.value)} placeholder="Write something worth keeping…" required/></label>
             <label>Publish date<input type="date" value={publishDate} onChange={e => setPublishDate(e.target.value)}/></label>
-            <label className="upload-box"><Upload size={17}/> Upload background image<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => uploadImage(e.target.files?.[0])}/><small>JPG, PNG, WEBP or GIF · up to 8 MB</small></label>
-            {imageUrl && <div className="image-preview"><img src={resolveImg(imageUrl)} alt="Selected background"/><button onClick={() => setImageUrl("")}><X size={15}/> Remove</button></div>}
-            <label className="upload-box"><Headphones size={17}/> Upload voice recitation / audio<input type="file" accept="audio/*" onChange={e => uploadAudio(e.target.files?.[0])}/><small>MP3, WAV, M4A, AAC or OGG · up to 25 MB</small></label>
-            {audioUrl && <div className="image-preview audio-preview-box"><audio controls src={resolveImg(audioUrl)} /><button onClick={() => setAudioUrl("")}><X size={15}/> Remove audio</button></div>}
+            {!imageUrl ? (
+              <label className="upload-box"><Upload size={17}/> Upload background image<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => uploadImage(e.target.files?.[0])}/><small>JPG, PNG, WEBP or GIF · up to 8 MB</small></label>
+            ) : (
+              <div className="image-preview"><img src={resolveImg(imageUrl)} alt="Selected background"/><button className="danger-button" onClick={() => setImageUrl("")}><X size={15}/> Remove background image</button></div>
+            )}
+            {!audioUrl ? (
+              <label className="upload-box"><Headphones size={17}/> Upload voice recitation / audio<input type="file" accept="audio/*" onChange={e => uploadAudio(e.target.files?.[0])}/><small>MP3, WAV, M4A, AAC or OGG · up to 25 MB</small></label>
+            ) : (
+              <div className="image-preview audio-preview-box"><audio controls src={resolveImg(audioUrl)} /><button className="danger-button" onClick={() => setAudioUrl("")}><X size={15}/> Remove audio recitation</button></div>
+            )}
             <div className="editor-buttons"><button className="outline-button" disabled={busy} onClick={() => save(false)}>Save draft</button><button className="primary-button" disabled={busy || !title.trim() || !content.trim()} onClick={() => save(true)}>Publish entry <ArrowUpRight size={16}/></button></div>
           </section>
           <aside className="preview-panel"><p className="eyebrow dark">LIVE PREVIEW</p><div className="preview-card" style={{ backgroundImage: `linear-gradient(180deg,rgba(17,27,50,.35),rgba(17,27,50,.92)),url("${resolveImg(imageUrl || "/archive-illustration.jpeg")}")` }}><span>{type} · {fmt(publishDate)} {audioUrl ? "🎧" : ""}</span><h2>{title || "Your title goes here"}</h2><p>{content || "Your writing will appear here, just as readers will see it."}</p></div></aside>
