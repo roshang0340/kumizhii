@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { GoogleLogin, googleLogout } from "@react-oauth/google";
-import { ArrowDown, ArrowLeft, ArrowUpRight, CalendarDays, Feather, Headphones, ImagePlus, LogOut, MessageCircle, PenLine, Sparkles, Upload, Volume2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUpRight, BookOpen, CalendarDays, Feather, Headphones, Home, ImagePlus, LogOut, MessageCircle, PenLine, Sparkles, Upload, Volume2, X } from "lucide-react";
 
 const getApiUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL;
@@ -400,6 +400,31 @@ function App() {
 
       <footer><span>நாளொரு வரி</span><span className="footer-tag">குமிழி ✨❤️</span><span>© {new Date().getFullYear()}</span></footer>
       {notice && page !== "login" && <div className="toast" role="status">{notice}<button onClick={() => setNotice("")}><X size={14}/></button></div>}
+
+      {/* Flutter-Style Mobile Bottom Navigation Bar */}
+      <nav className="mobile-bottom-nav">
+        <button
+          className={page === "home" ? "active" : ""}
+          onClick={() => { setPage("home"); loadPublic(); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+        >
+          <Home size={20} />
+          <span>இன்றைய வரி</span>
+        </button>
+        <button
+          className={page === "archive" || page === "read" ? "active" : ""}
+          onClick={() => { setPage("archive"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+        >
+          <BookOpen size={20} />
+          <span>காப்பகம்</span>
+        </button>
+        <button
+          className={isAdmin ? "active" : ""}
+          onClick={() => { setPage(token ? "admin" : "login"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+        >
+          <PenLine size={20} />
+          <span>{token ? "நிர்வாகம்" : "உள்நுழை"}</span>
+        </button>
+      </nav>
     </div>
   );
 }
