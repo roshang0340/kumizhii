@@ -232,10 +232,6 @@ export async function initDb() {
       INSERT OR IGNORE INTO settings(key, value) VALUES ('ai_enabled', 'false');
     `);
 
-    try {
-      await db.execute("ALTER TABLE posts ADD COLUMN audio_url TEXT");
-    } catch {}
-
     isInitialized = true;
   } catch (err) {
     console.error("Failed to initialize database tables:", err);
