@@ -59,10 +59,8 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 app.get("/api/posts/today", async (_req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
     const result = await db.execute({
-      sql: `SELECT ${postFields} FROM posts WHERE status='published' AND publish_date <= ? ORDER BY publish_date DESC, id DESC LIMIT 1`,
-      args: [today]
+      sql: `SELECT ${postFields} FROM posts WHERE status='published' ORDER BY publish_date DESC, id DESC LIMIT 1`
     });
     res.json(result.rows[0] || null);
   } catch (err) {

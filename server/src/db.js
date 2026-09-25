@@ -75,9 +75,8 @@ class MemoryDb {
     }
 
     if (normalized.includes("from posts") && normalized.includes("limit 1")) {
-      const today = args[0] || new Date().toISOString().slice(0, 10);
       const published = this.posts
-        .filter(p => p.status === "published" && (p.publish_date || p.created_at.slice(0, 10)) <= today)
+        .filter(p => p.status === "published")
         .sort((a, b) => (b.publish_date || b.created_at).localeCompare(a.publish_date || a.created_at) || b.id - a.id);
       return { rows: published[0] ? [published[0]] : [], rowsAffected: 0 };
     }
