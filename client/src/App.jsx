@@ -121,6 +121,14 @@ function App() {
       await loadAdmin(); await loadPublic();
     } catch (e) { setNotice(e.message); }
   }
+  async function deletePost(p) {
+    if (!window.confirm(`Delete "${p.title}" permanently?`)) return;
+    try {
+      await api(`/api/admin/posts/${p.id}`, { method: "DELETE" });
+      setNotice("Entry deleted.");
+      await loadAdmin(); await loadPublic();
+    } catch (e) { setNotice(e.message); }
+  }
 
   const isAdmin = ["admin", "editor", "feedback"].includes(page);
   return (
@@ -244,7 +252,7 @@ function App() {
         {page === "admin" && <>
           <div className="settings-strip"><div><Sparkles size={18}/><div><strong>AI writing assistant</strong><small>Only called when you explicitly generate a draft.</small></div></div><button className={`toggle ${aiEnabled ? "on" : ""}`} onClick={() => toggleAI(!aiEnabled)} aria-label="Toggle AI"><span/></button><b>{aiEnabled ? "ON" : "OFF"}</b></div>
           <div className="admin-actions"><button className="primary-button" onClick={() => { startNew(); setPage("editor"); }}><PenLine size={16}/> New entry</button><button className="outline-button" onClick={() => setPage("feedback")}><MessageCircle size={16}/> Reader notes ({feedback.length})</button></div>
-          <div className="post-table">{posts.map(p => <div className="post-row" key={p.id}><div><span className={`status ${p.status}`}>{p.status}</span><strong>{p.title} {p.audio_url ? "🎧" : ""}</strong><small>{p.type} · {fmt(p.publish_date)}</small></div><button onClick={() => edit(p)}>Edit</button><button onClick={() => publishToggle(p)}>{p.status === "published" ? "Unpublish" : "Publish"}</button></div>)}{!posts.length && <p className="muted">No entries yet. Create your first one.</p>}</div>
+          <div className="post-table">{posts.map(p => <div className="post-row" key={p.id}><div><span className={`status ${p.status}`}>{p.status}</span><strong>{p.title} {p.audio_url ? "🎧" : ""}</strong><small>{p.type} · {fmt(p.publish_date)}</small></div><button onClick={() => edit(p)}>Edit</button><button onClick={() => publishToggle(p)}>{p.status === "published" ? "Unpublish" : "Publish"}</button><button className="danger-button" onClick={() => deletePost(p)}>Delete</button></div>)}{!posts.length && <p className="muted">No entries yet. Create your first one.</p>}</div>
         </>}
         {page === "editor" && <div className="editor-layout">
           <section className="editor-form">

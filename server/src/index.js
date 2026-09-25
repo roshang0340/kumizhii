@@ -175,6 +175,15 @@ app.post("/api/admin/posts/:id/unpublish", adminOnly, async (req, res) => {
   res.json({ ok: true });
 });
 
+app.delete("/api/admin/posts/:id", adminOnly, async (req, res) => {
+  const result = await db.execute({
+    sql: "DELETE FROM posts WHERE id=?",
+    args: [Number(req.params.id)]
+  });
+  if (!result.rowsAffected) return res.status(404).json({ error: "Post not found." });
+  res.json({ ok: true });
+});
+
 app.post("/api/admin/generate", adminOnly, async (req, res) => {
   const setting = await db.execute("SELECT value FROM settings WHERE key='ai_enabled'");
   const enabled = setting.rows[0]?.value === "true";
