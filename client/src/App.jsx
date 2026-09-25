@@ -101,7 +101,17 @@ function App() {
       } else {
         try {
           const cachedArch = localStorage.getItem("kumizhii_archive_posts");
-          if (cachedArch) setArchive(JSON.parse(cachedArch));
+          if (cachedArch) {
+            const parsedArch = JSON.parse(cachedArch);
+            if (parsedArch && parsedArch.length > 0) setArchive(parsedArch);
+          } else {
+            const adminCached = localStorage.getItem("kumizhii_admin_posts");
+            if (adminCached) {
+              const parsedAdmin = JSON.parse(adminCached);
+              const pubList = parsedAdmin.filter(x => x.status === "published");
+              if (pubList.length > 0) setArchive(pubList);
+            }
+          }
         } catch {}
       }
     } catch {
@@ -125,12 +135,22 @@ function App() {
       if (Array.isArray(p) && p.length > 0) {
         setPosts(p);
         try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(p)); } catch {}
+        const pubList = p.filter(x => x.status === "published");
+        if (pubList.length > 0) {
+          setArchive(pubList);
+          try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
+          setPost(pubList[0]);
+          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
+        }
       } else if (Array.isArray(p)) {
         try {
           const cached = localStorage.getItem("kumizhii_admin_posts");
           const parsed = cached ? JSON.parse(cached) : [];
-          if (parsed && parsed.length > 0) setPosts(parsed);
-          else setPosts([]);
+          if (parsed && parsed.length > 0) {
+            setPosts(parsed);
+            const pubList = parsed.filter(x => x.status === "published");
+            if (pubList.length > 0) setArchive(pubList);
+          } else setPosts([]);
         } catch { setPosts([]); }
       }
       if (typeof s.aiEnabled === "boolean") setAiEnabled(s.aiEnabled);
@@ -171,11 +191,9 @@ function App() {
       const p = editing
         ? await api(`/api/admin/posts/${editing}`, { method: "PUT", body: JSON.stringify(body) })
         : await api("/api/admin/posts", { method: "POST", body: JSON.stringify(body) });
-      const publishedObj = { id: p.id, title, content, type, image_url: imageUrl, audio_url: audioUrl, status: publish ? "published" : "draft", publish_date: publishDate, created_at: new Date().toISOString() };
+      const publishedObj = { id: p.id, title, content, type, image_url: imageUrl, audio_url: audioUrl, status: publish ? "published" : (editing ? (posts.find(x => x.id === editing)?.status || "draft") : "draft"), publish_date: publishDate, created_at: new Date().toISOString() };
       if (publish) {
         await api(`/api/admin/posts/${p.id}/publish`, { method: "POST" });
-        setPost(publishedObj);
-        try { localStorage.setItem("kumizhii_today_post", JSON.stringify(publishedObj)); } catch {}
       }
       setPosts(prev => {
         const idx = prev.findIndex(x => x.id === p.id);
@@ -187,6 +205,13 @@ function App() {
           newArr = [publishedObj, ...prev];
         }
         try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(newArr)); } catch {}
+        const pubList = newArr.filter(x => x.status === "published");
+        setArchive(pubList);
+        try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
+        if (pubList[0]) {
+          setPost(pubList[0]);
+          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
+        }
         return newArr;
       });
       setNotice(publish ? "Published successfully." : "Draft saved.");
@@ -252,6 +277,13 @@ function App() {
       setPosts(prev => {
         const newArr = prev.map(item => item.id === p.id ? { ...item, status: newStatus } : item);
         try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(newArr)); } catch {}
+        const pubList = newArr.filter(x => x.status === "published");
+        setArchive(pubList);
+        try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
+        if (pubList[0]) {
+          setPost(pubList[0]);
+          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
+        }
         return newArr;
       });
       await loadAdmin(); await loadPublic();
@@ -265,6 +297,13 @@ function App() {
       setPosts(prev => {
         const newArr = prev.filter(item => item.id !== p.id);
         try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(newArr)); } catch {}
+        const pubList = newArr.filter(x => x.status === "published");
+        setArchive(pubList);
+        try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
+        if (pubList[0]) {
+          setPost(pubList[0]);
+          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
+        }
         return newArr;
       });
       await loadAdmin(); await loadPublic();
