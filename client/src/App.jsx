@@ -17,8 +17,18 @@ const resolveImg = (url) => url ? (url.startsWith("http") || url.startsWith("//"
 
 function App() {
   const [page, setPage] = useState("home");
-  const [post, setPost] = useState(null);
-  const [archive, setArchive] = useState([]);
+  const [post, setPost] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kumizhii_today_post");
+      return cached ? JSON.parse(cached) : null;
+    } catch { return null; }
+  });
+  const [archive, setArchive] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kumizhii_archive_posts");
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [feedback, setFeedback] = useState([]);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
@@ -33,7 +43,12 @@ function App() {
     } catch {}
     setTokenState(t);
   };
-  const [posts, setPosts] = useState([]);
+  const [posts, setPosts] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kumizhii_admin_posts");
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [aiEnabled, setAiEnabled] = useState(false);
   const [editing, setEditing] = useState(null);
   const [title, setTitle] = useState("");
@@ -53,7 +68,31 @@ function App() {
     return data;
   }
   async function loadPublic() {
-    try { setPost(await api("/api/posts/today")); setArchive(await api("/api/posts/archive")); } catch { setPost(null); }
+    try {
+      const fetchedToday = await api("/api/posts/today");
+      const fetchedArchive = await api("/api/posts/archive");
+      if (fetchedToday) {
+        setPost(fetchedToday);
+        try { localStorage.setItem("kumizhii_today_post", JSON.stringify(fetchedToday)); } catch {}
+      } else {
+        try {
+          const cached = localStorage.getItem("kumizhii_today_post");
+          if (cached) setPost(JSON.parse(cached));
+          else setPost(null);
+        } catch { setPost(null); }
+      }
+      if (Array.isArray(fetchedArchive) && fetchedArchive.length > 0) {
+        setArchive(fetchedArchive);
+        try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(fetchedArchive)); } catch {}
+      }
+    } catch {
+      try {
+        const cached = localStorage.getItem("kumizhii_today_post");
+        if (cached) setPost(JSON.parse(cached));
+        const cachedArch = localStorage.getItem("kumizhii_archive_posts");
+        if (cachedArch) setArchive(JSON.parse(cachedArch));
+      } catch {}
+    }
   }
   async function loadAdmin(t = token) {
     if (!t) return;
@@ -64,10 +103,21 @@ function App() {
         fetch(`${API}/api/admin/settings`, { headers: h }).then(r => r.json()),
         fetch(`${API}/api/admin/feedback`, { headers: h }).then(r => r.json())
       ]);
-      if (Array.isArray(p)) setPosts(p);
+      if (Array.isArray(p) && p.length > 0) {
+        setPosts(p);
+        try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(p)); } catch {}
+      } else if (Array.isArray(p)) {
+        setPosts(p);
+      }
       if (typeof s.aiEnabled === "boolean") setAiEnabled(s.aiEnabled);
       if (Array.isArray(f)) setFeedback(f);
-    } catch (e) { setNotice(e.message); }
+    } catch (e) {
+      setNotice(e.message);
+      try {
+        const cachedAdmin = localStorage.getItem("kumizhii_admin_posts");
+        if (cachedAdmin) setPosts(JSON.parse(cachedAdmin));
+      } catch {}
+    }
   }
   useEffect(() => { loadPublic(); }, []);
   useEffect(() => { if (token) loadAdmin(token); }, [token]);
@@ -86,7 +136,12 @@ function App() {
       const p = editing
         ? await api(`/api/admin/posts/${editing}`, { method: "PUT", body: JSON.stringify(body) })
         : await api("/api/admin/posts", { method: "POST", body: JSON.stringify(body) });
-      if (publish) await api(`/api/admin/posts/${p.id}/publish`, { method: "POST" });
+      if (publish) {
+        await api(`/api/admin/posts/${p.id}/publish`, { method: "POST" });
+        const publishedObj = { id: p.id, title, content, type, image_url: imageUrl, audio_url: audioUrl, status: "published", publish_date: publishDate, created_at: new Date().toISOString() };
+        setPost(publishedObj);
+        try { localStorage.setItem("kumizhii_today_post", JSON.stringify(publishedObj)); } catch {}
+      }
       setNotice(publish ? "Published successfully." : "Draft saved.");
       await loadAdmin(); await loadPublic(); setPage("admin");
     } catch (e) { setNotice(e.message); }
