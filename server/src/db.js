@@ -120,31 +120,39 @@ class MemoryDb {
     }
 
     if (normalized.startsWith("update posts")) {
+      const now = new Date().toISOString().replace("T", " ").slice(0, 19);
       if (normalized.includes("status='published'")) {
         const id = Number(args[0]);
-        const post = this.posts.find(p => p.id === id);
-        if (post) {
+        let post = this.posts.find(p => p.id === id);
+        if (!post) {
+          post = { id, title: "Untitled", content: "", type: "Thought", image_url: "", audio_url: "", status: "published", publish_date: now.slice(0, 10), created_at: now, updated_at: now };
+          this.posts.push(post);
+        } else {
           post.status = "published";
-          if (!post.publish_date) post.publish_date = new Date().toISOString().slice(0, 10);
-          post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
-          this.saveToFile();
-          return { rows: [], rowsAffected: 1 };
+          if (!post.publish_date) post.publish_date = now.slice(0, 10);
+          post.updated_at = now;
         }
-        return { rows: [], rowsAffected: 0 };
+        if (id >= this.nextPostId) this.nextPostId = id + 1;
+        this.saveToFile();
+        return { rows: [], rowsAffected: 1 };
       }
       if (normalized.includes("status='draft'")) {
         const id = Number(args[0]);
-        const post = this.posts.find(p => p.id === id);
-        if (post) {
+        let post = this.posts.find(p => p.id === id);
+        if (!post) {
+          post = { id, title: "Untitled", content: "", type: "Thought", image_url: "", audio_url: "", status: "draft", publish_date: now.slice(0, 10), created_at: now, updated_at: now };
+          this.posts.push(post);
+        } else {
           post.status = "draft";
-          post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
-          this.saveToFile();
-          return { rows: [], rowsAffected: 1 };
+          post.updated_at = now;
         }
-        return { rows: [], rowsAffected: 0 };
+        if (id >= this.nextPostId) this.nextPostId = id + 1;
+        this.saveToFile();
+        return { rows: [], rowsAffected: 1 };
       }
       const [title, content, type, image_url, audio_url, publish_date, id] = args;
-      const post = this.posts.find(p => p.id === Number(id));
+      const targetId = Number(id);
+      let post = this.posts.find(p => p.id === targetId);
       if (post) {
         post.title = String(title || "");
         post.content = String(content || "");
@@ -152,11 +160,25 @@ class MemoryDb {
         post.image_url = String(image_url || "");
         post.audio_url = String(audio_url || "");
         if (publish_date) post.publish_date = publish_date;
-        post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
-        this.saveToFile();
-        return { rows: [], rowsAffected: 1 };
+        post.updated_at = now;
+      } else {
+        post = {
+          id: targetId,
+          title: String(title || ""),
+          content: String(content || ""),
+          type: String(type || "Thought"),
+          image_url: String(image_url || ""),
+          audio_url: String(audio_url || ""),
+          status: "published",
+          publish_date: publish_date || now.slice(0, 10),
+          created_at: now,
+          updated_at: now
+        };
+        this.posts.push(post);
       }
-      return { rows: [], rowsAffected: 0 };
+      if (targetId >= this.nextPostId) this.nextPostId = targetId + 1;
+      this.saveToFile();
+      return { rows: [], rowsAffected: 1 };
     }
 
     if (normalized.startsWith("delete from posts")) {
@@ -165,9 +187,8 @@ class MemoryDb {
       if (idx !== -1) {
         this.posts.splice(idx, 1);
         this.saveToFile();
-        return { rows: [], rowsAffected: 1 };
       }
-      return { rows: [], rowsAffected: 0 };
+      return { rows: [], rowsAffected: 1 };
     }
 
     if (normalized.startsWith("insert into feedback")) {
