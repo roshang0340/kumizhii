@@ -99,7 +99,8 @@ function App() {
     try {
       const r = await fetch(`${API}/api/admin/upload`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
       const data = await r.json(); if (!r.ok) throw new Error(data.error || "Upload failed.");
-      setImageUrl(`${API}${data.imageUrl}`); setNotice("Background uploaded.");
+      const imgPath = data.imageUrl ? (data.imageUrl.startsWith("http") || data.imageUrl.startsWith("data:") ? data.imageUrl : `${API}${data.imageUrl}`) : "";
+      setImageUrl(imgPath); setNotice("Background uploaded.");
     } catch (e) { setNotice(e.message); }
     finally { setBusy(false); }
   }
@@ -110,7 +111,8 @@ function App() {
     try {
       const r = await fetch(`${API}/api/admin/upload-audio`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
       const data = await r.json(); if (!r.ok) throw new Error(data.error || "Audio upload failed.");
-      setAudioUrl(`${API}${data.audioUrl}`); setNotice("Voice recitation / audio uploaded.");
+      const audPath = data.audioUrl ? (data.audioUrl.startsWith("http") || data.audioUrl.startsWith("data:") ? data.audioUrl : `${API}${data.audioUrl}`) : "";
+      setAudioUrl(audPath); setNotice("Voice recitation / audio uploaded.");
     } catch (e) { setNotice(e.message); }
     finally { setBusy(false); }
   }
