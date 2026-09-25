@@ -62,6 +62,7 @@ function App() {
   const [publishDate, setPublishDate] = useState(today);
   const [imageUrl, setImageUrl] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
+  const [idea, setIdea] = useState("");
   const [busy, setBusy] = useState(false);
   const [dbStatus, setDbStatus] = useState(null);
 
