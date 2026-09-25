@@ -338,7 +338,7 @@ function App() {
       </header>
 
       {page === "home" && <main>
-        <section className="hero" style={{ backgroundImage: `linear-gradient(180deg,rgba(17,27,50,.35),rgba(17,27,50,.92)),url("${resolveImg(post?.image_url || "/archive-illustration.jpeg")}")`, backgroundSize: "cover", backgroundPosition: "center" }}>
+        <section className="hero" style={{ backgroundImage: `linear-gradient(180deg,rgba(17,27,50,.35),rgba(17,27,50,.92)),url("${resolveImg(post?.image_url || "/archive-illustration.jpeg")}")`, backgroundSize: "cover", backgroundPosition: "top center" }}>
           <div className="hero-glow"></div>
           <div className="eyebrow"><span className="live-dot"></span> A LITTLE SOMETHING FOR TODAY</div>
           <div className="hero-copy">
@@ -482,7 +482,7 @@ function App() {
             )}
             <div className="editor-buttons"><button className="outline-button" disabled={busy} onClick={() => save(false)}>Save draft</button><button className="primary-button" disabled={busy || !title.trim() || !content.trim()} onClick={() => save(true)}>Publish entry <ArrowUpRight size={16}/></button></div>
           </section>
-          <aside className="preview-panel"><p className="eyebrow dark">LIVE PREVIEW</p><div className="preview-card" style={{ backgroundImage: `linear-gradient(180deg,rgba(17,27,50,.35),rgba(17,27,50,.92)),url("${resolveImg(imageUrl || "/archive-illustration.jpeg")}")` }}><span>{type} · {fmt(publishDate)} {audioUrl ? "🎧" : ""}</span><h2>{title || "Your title goes here"}</h2><p>{content || "Your writing will appear here, just as readers will see it."}</p></div></aside>
+          <aside className="preview-panel"><p className="eyebrow dark">LIVE PREVIEW</p><div className="preview-card" style={{ backgroundImage: `linear-gradient(180deg,rgba(17,27,50,.35),rgba(17,27,50,.92)),url("${resolveImg(imageUrl || "/archive-illustration.jpeg")}")`, backgroundSize: "cover", backgroundPosition: "top center" }}><span>{type} · {fmt(publishDate)} {audioUrl ? "🎧" : ""}</span><h2>{title || "Your title goes here"}</h2><p>{content || "Your writing will appear here, just as readers will see it."}</p></div></aside>
         </div>}
         {page === "feedback" && <div className="feedback-list">{feedback.map(f => <article className="feedback-item" key={f.id}><p>{f.message}</p><small>{f.name || "Anonymous"} · {f.post_title || "General"} · {f.created_at}</small></article>)}{!feedback.length && <p className="muted">No reader notes yet.</p>}<button className="outline-button" onClick={() => setPage("admin")}>Back to dashboard</button></div>}
       </main>}
