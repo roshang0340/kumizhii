@@ -245,11 +245,10 @@ app.post("/api/admin/posts/:id/unpublish", adminOnly, async (req, res) => {
 
 app.delete("/api/admin/posts/:id", adminOnly, async (req, res) => {
   try {
-    const result = await db.execute({
+    await db.execute({
       sql: "DELETE FROM posts WHERE id=?",
       args: [Number(req.params.id)]
     });
-    if (!result.rowsAffected) return res.status(404).json({ error: "Post not found." });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to delete post." });

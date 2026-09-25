@@ -289,11 +289,32 @@ function App() {
   }
   async function deletePost(p) {
     if (!window.confirm(`Delete "${p.title}" permanently?`)) return;
+    setBusy(true); setNotice("");
     try {
-      await api(`/api/admin/posts/${p.id}`, { method: "DELETE" });
+      try {
+        await api(`/api/admin/posts/${p.id}`, { method: "DELETE" });
+      } catch (e) {
+        console.warn("Delete API note:", e.message);
+      }
+      setPosts(prev => {
+        const filtered = prev.filter(x => x.id !== p.id && x.title !== p.title);
+        try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(filtered)); } catch {}
+        const pubList = filtered.filter(x => x.status === "published");
+        setArchive(pubList);
+        try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
+        if (pubList[0]) {
+          setPost(pubList[0]);
+          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
+        } else {
+          setPost(null);
+          try { localStorage.removeItem("kumizhii_today_post"); } catch {}
+        }
+        return filtered;
+      });
       setNotice("Entry deleted.");
       await loadAdmin(); await loadPublic();
     } catch (e) { setNotice(e.message); }
+    finally { setBusy(false); }
   }
 
   const isAdmin = ["admin", "editor", "feedback"].includes(page);
