@@ -5,23 +5,167 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const isVercel = Boolean(process.env.VERCEL);
-
 const tursoUrl = process.env.TURSO_DATABASE_URL;
 const tursoToken = process.env.TURSO_AUTH_TOKEN;
 
-const localDbPath = isVercel
-  ? "file:/tmp/app.db"
-  : `file:${path.resolve(here, "../data/app.db")}`;
+class MemoryDb {
+  constructor() {
+    this.posts = [];
+    this.feedback = [];
+    this.settings = new Map([["ai_enabled", "false"]]);
+    this.nextPostId = 1;
+    this.nextFeedbackId = 1;
+  }
 
-if (!tursoUrl && !isVercel) {
-  const dataDir = path.resolve(here, "../data");
-  fs.mkdirSync(dataDir, { recursive: true });
+  async execute(input) {
+    const sql = typeof input === "string" ? input : input.sql;
+    const args = (typeof input === "object" && input.args) || [];
+    const normalized = sql.trim().toLowerCase();
+
+    if (normalized.startsWith("create table") || normalized.startsWith("alter table") || normalized.startsWith("insert or ignore into settings")) {
+      return { rows: [], rowsAffected: 0, lastInsertRowid: 0n };
+    }
+
+    if (normalized.includes("from settings")) {
+      const val = this.settings.get("ai_enabled") || "false";
+      return { rows: [{ value: val }], rowsAffected: 0 };
+    }
+
+    if (normalized.includes("into settings") || normalized.includes("settings")) {
+      if (args.length > 0) this.settings.set("ai_enabled", String(args[0]));
+      return { rows: [], rowsAffected: 1 };
+    }
+
+    if (normalized.includes("from posts") && normalized.includes("limit 1")) {
+      const today = args[0] || new Date().toISOString().slice(0, 10);
+      const published = this.posts
+        .filter(p => p.status === "published" && (p.publish_date || p.created_at.slice(0, 10)) <= today)
+        .sort((a, b) => (b.publish_date || b.created_at).localeCompare(a.publish_date || a.created_at) || b.id - a.id);
+      return { rows: published[0] ? [published[0]] : [], rowsAffected: 0 };
+    }
+
+    if (normalized.includes("from posts") && normalized.includes("status='published'")) {
+      const published = this.posts
+        .filter(p => p.status === "published")
+        .sort((a, b) => (b.publish_date || b.created_at).localeCompare(a.publish_date || a.created_at) || b.id - a.id);
+      return { rows: published, rowsAffected: 0 };
+    }
+
+    if (normalized.includes("from posts") && !normalized.includes("where id=")) {
+      const sorted = [...this.posts].sort((a, b) => (b.publish_date || b.created_at).localeCompare(a.publish_date || a.created_at) || b.id - a.id);
+      return { rows: sorted, rowsAffected: 0 };
+    }
+
+    if (normalized.includes("from posts where id=")) {
+      const targetId = Number(args[0]);
+      const found = this.posts.find(p => p.id === targetId);
+      return { rows: found ? [found] : [], rowsAffected: 0 };
+    }
+
+    if (normalized.startsWith("insert into posts")) {
+      const [title, content, type, image_url, audio_url, publish_date] = args;
+      const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const newPost = {
+        id: this.nextPostId++,
+        title: String(title || ""),
+        content: String(content || ""),
+        type: String(type || "Thought"),
+        image_url: String(image_url || ""),
+        audio_url: String(audio_url || ""),
+        status: "draft",
+        publish_date: publish_date || now.slice(0, 10),
+        created_at: now,
+        updated_at: now
+      };
+      this.posts.push(newPost);
+      return { rows: [], rowsAffected: 1, lastInsertRowid: BigInt(newPost.id) };
+    }
+
+    if (normalized.startsWith("update posts")) {
+      if (normalized.includes("status='published'")) {
+        const id = Number(args[0]);
+        const post = this.posts.find(p => p.id === id);
+        if (post) {
+          post.status = "published";
+          if (!post.publish_date) post.publish_date = new Date().toISOString().slice(0, 10);
+          post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
+          return { rows: [], rowsAffected: 1 };
+        }
+        return { rows: [], rowsAffected: 0 };
+      }
+      if (normalized.includes("status='draft'")) {
+        const id = Number(args[0]);
+        const post = this.posts.find(p => p.id === id);
+        if (post) {
+          post.status = "draft";
+          post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
+          return { rows: [], rowsAffected: 1 };
+        }
+        return { rows: [], rowsAffected: 0 };
+      }
+      const [title, content, type, image_url, audio_url, publish_date, id] = args;
+      const post = this.posts.find(p => p.id === Number(id));
+      if (post) {
+        post.title = String(title || "");
+        post.content = String(content || "");
+        post.type = String(type || "Thought");
+        post.image_url = String(image_url || "");
+        post.audio_url = String(audio_url || "");
+        if (publish_date) post.publish_date = publish_date;
+        post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
+        return { rows: [], rowsAffected: 1 };
+      }
+      return { rows: [], rowsAffected: 0 };
+    }
+
+    if (normalized.startsWith("delete from posts")) {
+      const id = Number(args[0]);
+      const idx = this.posts.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        this.posts.splice(idx, 1);
+        return { rows: [], rowsAffected: 1 };
+      }
+      return { rows: [], rowsAffected: 0 };
+    }
+
+    if (normalized.startsWith("insert into feedback")) {
+      const [name, message, post_id] = args;
+      const newFb = {
+        id: this.nextFeedbackId++,
+        name: name || null,
+        message: String(message || ""),
+        post_id: post_id || null,
+        created_at: new Date().toISOString().replace("T", " ").slice(0, 19)
+      };
+      this.feedback.push(newFb);
+      return { rows: [], rowsAffected: 1, lastInsertRowid: BigInt(newFb.id) };
+    }
+
+    if (normalized.includes("from feedback")) {
+      const result = this.feedback.map(f => {
+        const post = this.posts.find(p => p.id === f.post_id);
+        return { ...f, post_title: post ? post.title : null };
+      }).sort((a, b) => b.id - a.id);
+      return { rows: result, rowsAffected: 0 };
+    }
+
+    return { rows: [], rowsAffected: 0 };
+  }
 }
 
-export const db = createClient({
-  url: tursoUrl || localDbPath,
-  authToken: tursoToken || undefined,
-});
+function createDbClient() {
+  if (tursoUrl) {
+    return createClient({ url: tursoUrl, authToken: tursoToken || undefined });
+  }
+  if (isVercel) {
+    return new MemoryDb();
+  }
+  const dataDir = path.resolve(here, "../data");
+  fs.mkdirSync(dataDir, { recursive: true });
+  return createClient({ url: `file:${path.resolve(here, "../data/app.db")}` });
+}
+
+export const db = createDbClient();
 
 let isInitialized = false;
 
