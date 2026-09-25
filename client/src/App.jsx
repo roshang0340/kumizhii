@@ -23,7 +23,16 @@ function App() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
-  const [token, setToken] = useState("");
+  const [token, setTokenState] = useState(() => {
+    try { return localStorage.getItem("kumizhii_admin_token") || ""; } catch { return ""; }
+  });
+  const setToken = (t) => {
+    try {
+      if (t) localStorage.setItem("kumizhii_admin_token", t);
+      else localStorage.removeItem("kumizhii_admin_token");
+    } catch {}
+    setTokenState(t);
+  };
   const [posts, setPosts] = useState([]);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [editing, setEditing] = useState(null);
