@@ -360,7 +360,6 @@ function App() {
             )}
             <button className="text-button" onClick={() => document.getElementById("reader-note")?.scrollIntoView({ behavior: "smooth" })}>Leave a note <ArrowDown size={16}/></button>
           </div>
-          <div className="hero-index">01 <span>/ THE DAILY PAGE</span></div>
         </section>
         <section className="note-section" id="reader-note">
           <div><p className="eyebrow dark">A NOTE FROM YOU</p><h2>What stayed with you?</h2><p className="muted">A thought, a feeling, or just a few words. We'd love to read it.</p></div>
