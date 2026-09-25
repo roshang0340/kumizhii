@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { GoogleLogin, googleLogout } from "@react-oauth/google";
 import { ArrowDown, ArrowLeft, ArrowUpRight, CalendarDays, Feather, Headphones, ImagePlus, LogOut, MessageCircle, PenLine, Sparkles, Upload, Volume2, X } from "lucide-react";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API = import.meta.env.VITE_API_URL !== undefined ? import.meta.env.VITE_API_URL : (import.meta.env.DEV ? "http://localhost:4000" : "");
 const today = new Date().toISOString().slice(0, 10);
 const fmt = (d) => d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "Unscheduled";
-const resolveImg = (url) => url ? (url.startsWith("http") || url.startsWith("//") ? url : `${API}${url}`) : "";
+const resolveImg = (url) => url ? (url.startsWith("http") || url.startsWith("//") || url.startsWith("data:") ? url : `${API}${url}`) : "";
 
 function App() {
   const [page, setPage] = useState("home");
