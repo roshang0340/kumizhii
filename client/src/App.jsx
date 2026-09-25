@@ -389,10 +389,39 @@ function App() {
             }}
           />
         </div>
-        <div className="archive-grid">{archive.map((p, i) => <button className="archive-card" key={p.id} onClick={() => { setPost(p); setPage("read"); }}><span className="card-number">{String(i+1).padStart(2,"0")}</span><span className="card-type">{p.type} · {fmt(p.publish_date)} {p.audio_url ? "🎧" : ""}</span><strong>{p.title}</strong><span className="card-excerpt">{p.content.slice(0,130)}{p.content.length>130?"…":""}</span><ArrowUpRight size={18}/></button>)}{!archive.length && <p className="muted">The archive is waiting for its first entry.</p>}</div>
+        <div className="archive-grid">
+          {archive.map((p, i) => (
+            <div className="archive-card-wrapper" key={p.id}>
+              <button className="archive-card" onClick={() => { setPost(p); setPage("read"); }}>
+                <span className="card-number">{String(i+1).padStart(2,"0")}</span>
+                <span className="card-type">{p.type} · {fmt(p.publish_date)} {p.audio_url ? "🎧" : ""}</span>
+                <strong>{p.title}</strong>
+                <span className="card-excerpt">{p.content.slice(0,130)}{p.content.length>130?"…":""}</span>
+                <ArrowUpRight size={18}/>
+              </button>
+              {token && (
+                <div className="archive-admin-actions">
+                  <button onClick={() => edit(p)}>Edit</button>
+                  <button onClick={() => publishToggle(p)}>{p.status === "published" ? "Unpublish" : "Publish"}</button>
+                  <button className="danger-button" onClick={() => deletePost(p)}>Delete</button>
+                </div>
+              )}
+            </div>
+          ))}
+          {!archive.length && <p className="muted">The archive is waiting for its first entry.</p>}
+        </div>
       </main>}
       {page === "read" && <main className="inner-page read-page">
-        <button className="back-button" onClick={() => setPage("archive")}><ArrowLeft size={16}/> Back to archive</button>
+        <div className="read-header-bar">
+          <button className="back-button" onClick={() => setPage("archive")}><ArrowLeft size={16}/> Back to archive</button>
+          {token && post && (
+            <div className="read-admin-actions">
+              <button onClick={() => edit(post)}>Edit</button>
+              <button onClick={() => publishToggle(post)}>{post.status === "published" ? "Unpublish" : "Publish"}</button>
+              <button className="danger-button" onClick={() => deletePost(post)}>Delete</button>
+            </div>
+          )}
+        </div>
         <p className="eyebrow dark">{post?.type} · {fmt(post?.publish_date)}</p>
         <h1 className="page-title">{post?.title}</h1>
         {post?.audio_url && (

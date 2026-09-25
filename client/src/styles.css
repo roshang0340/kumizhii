@@ -7,8 +7,16 @@
   .topbar{padding:0 16px;height:62px;position:sticky;top:0;z-index:100;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:rgba(17,27,50,0.92);box-shadow:0 4px 18px rgba(0,0,0,0.25)}
   .brand-logo{height:34px}
   .topbar nav{display:none}
-  
-  .mobile-bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;height:66px;background:#111b32;border-top:1px solid rgba(255,255,255,0.12);z-index:9999;justify-content:space-around;align-items:center;padding:0 6px env(safe-area-inset-bottom);box-shadow:0 -6px 25px rgba(0,0,0,0.35)}
+ .archive-card-wrapper{display:flex;flex-direction:column;width:100%}
+.archive-card-wrapper .archive-card{width:100%;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.archive-admin-actions{display:flex;gap:8px;padding:10px 14px;background:#fffdf8;border:1px solid #e6e0d4;border-top:0;border-bottom-left-radius:10px;border-bottom-right-radius:10px}
+.archive-admin-actions button,.read-admin-actions button{padding:6px 12px;font-size:11px;font-weight:600;border-radius:6px;border:1px solid #cfc8b8;background:#fffdf8;color:#202b42;cursor:pointer}
+.archive-admin-actions button:hover,.read-admin-actions button:hover{background:#ebe5d8}
+.archive-admin-actions button.danger-button,.read-admin-actions button.danger-button{border-color:#d9534f;color:#c9302c}
+.archive-admin-actions button.danger-button:hover,.read-admin-actions button.danger-button:hover{background:#fdf2f2}
+.read-header-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}
+.read-header-bar .back-button{margin-bottom:0}
+.read-admin-actions{display:flex;gap:8px} .mobile-bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;height:66px;background:#111b32;border-top:1px solid rgba(255,255,255,0.12);z-index:9999;justify-content:space-around;align-items:center;padding:0 6px env(safe-area-inset-bottom);box-shadow:0 -6px 25px rgba(0,0,0,0.35)}
   .mobile-bottom-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:#8993a8;font-size:11px;font-weight:500;flex:1;height:100%;transition:all 0.2s ease}
   .mobile-bottom-nav button:active{transform:scale(0.92)}
   .mobile-bottom-nav button.active{color:#e2d4ae;font-weight:600}
