@@ -57,6 +57,15 @@ const postFields = "id, title, content, type, image_url, audio_url, status, publ
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+app.get("/api/db-status", async (_req, res) => {
+  try {
+    const status = await db.getStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ connected: false, error: err.message });
+  }
+});
+
 app.get("/api/posts/today", async (_req, res) => {
   try {
     const result = await db.execute({

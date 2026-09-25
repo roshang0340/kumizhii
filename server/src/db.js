@@ -254,6 +254,33 @@ class SafeDbClient {
     }
     return await this.memoryDb.execute(input);
   }
+
+  async getStatus() {
+    if (this.primaryDb) {
+      try {
+        await this.primaryDb.execute("SELECT 1");
+        return {
+          connected: true,
+          engine: process.env.TURSO_DATABASE_URL ? "turso" : "local-sqlite",
+          message: process.env.TURSO_DATABASE_URL
+            ? "Successfully connected to Turso Cloud Database!"
+            : "Connected to local SQLite database."
+        };
+      } catch (err) {
+        return {
+          connected: false,
+          engine: "memory",
+          error: err.message,
+          message: "Turso DB connection error. Falling back to MemoryDb."
+        };
+      }
+    }
+    return {
+      connected: false,
+      engine: "memory",
+      message: "No TURSO_DATABASE_URL environment variable set. Running in MemoryDb fallback mode."
+    };
+  }
 }
 
 export const db = new SafeDbClient();

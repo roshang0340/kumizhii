@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { GoogleLogin, googleLogout } from "@react-oauth/google";
-import { ArrowDown, ArrowLeft, ArrowUpRight, BookOpen, CalendarDays, Feather, Headphones, Home, ImagePlus, LogOut, MessageCircle, PenLine, Sparkles, Upload, Volume2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUpRight, BookOpen, CalendarDays, Database, Feather, Headphones, Home, ImagePlus, LogOut, MessageCircle, PenLine, Sparkles, Upload, Volume2, X } from "lucide-react";
 
 const getApiUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL;
@@ -62,8 +62,17 @@ function App() {
   const [publishDate, setPublishDate] = useState(today);
   const [imageUrl, setImageUrl] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
-  const [idea, setIdea] = useState("");
   const [busy, setBusy] = useState(false);
+  const [dbStatus, setDbStatus] = useState(null);
+
+  async function checkDb() {
+    try {
+      const res = await api("/api/db-status");
+      setDbStatus(res);
+    } catch {
+      setDbStatus({ connected: false, engine: "memory", message: "MemoryDb active." });
+    }
+  }
 
   const headers = useMemo(() => ({ "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }), [token]);
   async function api(path, options = {}) {
@@ -174,8 +183,8 @@ function App() {
       } catch {}
     }
   }
-  useEffect(() => { loadPublic(); }, []);
-  useEffect(() => { if (token) loadAdmin(token); }, [token]);
+  useEffect(() => { loadPublic(); checkDb(); }, []);
+  useEffect(() => { if (token) { loadAdmin(token); checkDb(); } }, [token]);
 
   function startNew() {
     setEditing(null); setTitle(""); setContent(""); setType("Thought"); setPublishDate(today); setImageUrl(""); setAudioUrl(""); setIdea("");
@@ -458,6 +467,7 @@ function App() {
         <div className="admin-heading"><div><p className="eyebrow dark">CONTROL ROOM</p><h1>{page === "editor" ? (editing ? "Edit entry." : "Create something.") : page === "feedback" ? "Reader notes." : "Your journal."}</h1></div><button className="outline-button" onClick={() => { googleLogout(); setToken(""); setPage("home"); }}><LogOut size={15}/> Sign out</button></div>
         {notice && <p className="notice">{notice}</p>}
         {page === "admin" && <>
+          <div className="settings-strip"><div><Database size={18}/><div><strong>Database connection status</strong><small>{dbStatus?.message || "Checking database connection…"}</small></div></div><b style={{ color: dbStatus?.connected ? "#367b60" : "#9c7b3c" }}>{dbStatus?.engine ? dbStatus.engine.toUpperCase() : "CHECKING…"}</b></div>
           <div className="settings-strip"><div><Sparkles size={18}/><div><strong>AI writing assistant</strong><small>Only called when you explicitly generate a draft.</small></div></div><button className={`toggle ${aiEnabled ? "on" : ""}`} onClick={() => toggleAI(!aiEnabled)} aria-label="Toggle AI"><span/></button><b>{aiEnabled ? "ON" : "OFF"}</b></div>
           <div className="admin-actions"><button className="primary-button" onClick={() => { startNew(); setPage("editor"); }}><PenLine size={16}/> New entry</button><button className="outline-button" onClick={() => setPage("feedback")}><MessageCircle size={16}/> Reader notes ({feedback.length})</button></div>
           <div className="post-table">{posts.map(p => <div className="post-row" key={p.id}><div><span className={`status ${p.status}`}>{p.status}</span><strong>{p.title} {p.audio_url ? "🎧" : ""}</strong><small>{p.type} · {fmt(p.publish_date)}</small></div><button onClick={() => edit(p)}>Edit</button><button onClick={() => publishToggle(p)}>{p.status === "published" ? "Unpublish" : "Publish"}</button><button className="danger-button" onClick={() => deletePost(p)}>Delete</button></div>)}{!posts.length && <p className="muted">No entries yet. Create your first one.</p>}</div>
