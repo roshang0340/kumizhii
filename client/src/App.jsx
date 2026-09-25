@@ -181,7 +181,7 @@ function App() {
             )}
             <button className="text-button" onClick={() => document.getElementById("reader-note")?.scrollIntoView({ behavior: "smooth" })}>Leave a note <ArrowDown size={16}/></button>
           </div>
-          {post?.image_url && <div className="hero-image" style={{ backgroundImage: `linear-gradient(90deg,rgba(17,27,50,.15),rgba(17,27,50,.05)),url("${resolveImg(post.image_url)}")` }} />}
+          <div className="hero-image" style={{ backgroundImage: `linear-gradient(90deg,rgba(17,27,50,.15),rgba(17,27,50,.05)),url("${resolveImg(post?.image_url || "/archive-illustration.jpeg")}")` }} />
           <div className="hero-index">01 <span>/ THE DAILY PAGE</span></div>
         </section>
         <section className="note-section" id="reader-note">
@@ -231,7 +231,7 @@ function App() {
           </div>
         )}
         <article className="reader-content">{post?.content}</article>
-        {post?.image_url && <img className="reader-image" src={resolveImg(post.image_url)} alt="Post background"/>}
+        <img className="reader-image" src={resolveImg(post?.image_url || "/archive-illustration.jpeg")} alt="Post background"/>
       </main>}
 
       {page === "login" && <main className="login-page"><div className="login-card">
@@ -276,7 +276,7 @@ function App() {
             {audioUrl && <div className="image-preview audio-preview-box"><audio controls src={resolveImg(audioUrl)} /><button onClick={() => setAudioUrl("")}><X size={15}/> Remove audio</button></div>}
             <div className="editor-buttons"><button className="outline-button" disabled={busy} onClick={() => save(false)}>Save draft</button><button className="primary-button" disabled={busy || !title.trim() || !content.trim()} onClick={() => save(true)}>Publish entry <ArrowUpRight size={16}/></button></div>
           </section>
-          <aside className="preview-panel"><p className="eyebrow dark">LIVE PREVIEW</p><div className="preview-card" style={imageUrl ? { backgroundImage: `linear-gradient(180deg,rgba(17,27,50,.35),rgba(17,27,50,.92)),url("${resolveImg(imageUrl)}")` } : {}}><span>{type} · {fmt(publishDate)} {audioUrl ? "🎧" : ""}</span><h2>{title || "Your title goes here"}</h2><p>{content || "Your writing will appear here, just as readers will see it."}</p></div></aside>
+          <aside className="preview-panel"><p className="eyebrow dark">LIVE PREVIEW</p><div className="preview-card" style={{ backgroundImage: `linear-gradient(180deg,rgba(17,27,50,.35),rgba(17,27,50,.92)),url("${resolveImg(imageUrl || "/archive-illustration.jpeg")}")` }}><span>{type} · {fmt(publishDate)} {audioUrl ? "🎧" : ""}</span><h2>{title || "Your title goes here"}</h2><p>{content || "Your writing will appear here, just as readers will see it."}</p></div></aside>
         </div>}
         {page === "feedback" && <div className="feedback-list">{feedback.map(f => <article className="feedback-item" key={f.id}><p>{f.message}</p><small>{f.name || "Anonymous"} · {f.post_title || "General"} · {f.created_at}</small></article>)}{!feedback.length && <p className="muted">No reader notes yet.</p>}<button className="outline-button" onClick={() => setPage("admin")}>Back to dashboard</button></div>}
       </main>}
