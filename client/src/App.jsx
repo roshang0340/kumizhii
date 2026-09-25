@@ -79,6 +79,7 @@ function App() {
     setEditing(p.id); setTitle(p.title); setContent(p.content); setType(p.type); setPublishDate(p.publish_date || today); setImageUrl(p.image_url || ""); setAudioUrl(p.audio_url || ""); setPage("editor");
   }
   async function save(publish = false) {
+    if (publish && !window.confirm("இந்தப் பதிவை உடனடியாக வெளியிட விரும்புகிறீர்களா? (Are you sure you want to publish this entry?)")) return;
     setBusy(true); setNotice("");
     try {
       const body = { title, content, type, publishDate, imageUrl, audioUrl };
@@ -133,6 +134,8 @@ function App() {
     catch (e) { setNotice(e.message); }
   }
   async function publishToggle(p) {
+    const isPublishing = p.status !== "published";
+    if (isPublishing && !window.confirm(`"${p.title}" பதிவை வெளியிட விரும்புகிறீர்களா? (Are you sure you want to publish this entry?)`)) return;
     try {
       await api(`/api/admin/posts/${p.id}/${p.status === "published" ? "unpublish" : "publish"}`, { method: "POST" });
       await loadAdmin(); await loadPublic();
