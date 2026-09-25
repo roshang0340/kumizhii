@@ -6,7 +6,9 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { OAuth2Client } from "google-auth-library";
-import { db, initDb } from "./db.js";
+BigInt.prototype.toJSON = function () {
+  return Number(this);
+};
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
