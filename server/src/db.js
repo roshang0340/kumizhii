@@ -5,8 +5,6 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const isVercel = Boolean(process.env.VERCEL);
-const tursoUrl = process.env.TURSO_DATABASE_URL;
-const tursoToken = process.env.TURSO_AUTH_TOKEN;
 
 class MemoryDb {
   constructor() {
@@ -153,19 +151,47 @@ class MemoryDb {
   }
 }
 
-function createDbClient() {
-  if (tursoUrl) {
-    return createClient({ url: tursoUrl, authToken: tursoToken || undefined });
+class SafeDbClient {
+  constructor() {
+    this.memoryDb = new MemoryDb();
+    this.primaryDb = null;
+    this.initPrimary();
   }
-  if (isVercel) {
-    return new MemoryDb();
+
+  initPrimary() {
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+    if (url) {
+      try {
+        const httpUrl = url.startsWith("libsql://") ? url.replace("libsql://", "https://") : url;
+        this.primaryDb = createClient({ url: httpUrl, authToken: authToken || undefined });
+      } catch (e) {
+        console.error("Failed to initialize Turso client, falling back to MemoryDb:", e);
+      }
+    } else if (!isVercel) {
+      try {
+        const dataDir = path.resolve(here, "../data");
+        fs.mkdirSync(dataDir, { recursive: true });
+        this.primaryDb = createClient({ url: `file:${path.resolve(here, "../data/app.db")}` });
+      } catch (e) {
+        console.error("Failed to initialize local sqlite, falling back to MemoryDb:", e);
+      }
+    }
   }
-  const dataDir = path.resolve(here, "../data");
-  fs.mkdirSync(dataDir, { recursive: true });
-  return createClient({ url: `file:${path.resolve(here, "../data/app.db")}` });
+
+  async execute(input) {
+    if (this.primaryDb) {
+      try {
+        return await this.primaryDb.execute(input);
+      } catch (err) {
+        console.error("Primary DB execute error, falling back to MemoryDb:", err);
+      }
+    }
+    return await this.memoryDb.execute(input);
+  }
 }
 
-export const db = createDbClient();
+export const db = new SafeDbClient();
 
 let isInitialized = false;
 
