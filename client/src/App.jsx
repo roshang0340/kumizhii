@@ -29,7 +29,12 @@ function App() {
       return cached ? JSON.parse(cached) : [];
     } catch { return []; }
   });
-  const [feedback, setFeedback] = useState([]);
+  const [feedback, setFeedback] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kumizhii_admin_feedback");
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
@@ -129,12 +134,23 @@ function App() {
         } catch { setPosts([]); }
       }
       if (typeof s.aiEnabled === "boolean") setAiEnabled(s.aiEnabled);
-      if (Array.isArray(f)) setFeedback(f);
+      if (Array.isArray(f) && f.length > 0) {
+        setFeedback(f);
+        try { localStorage.setItem("kumizhii_admin_feedback", JSON.stringify(f)); } catch {}
+      } else if (Array.isArray(f)) {
+        try {
+          const cachedFb = localStorage.getItem("kumizhii_admin_feedback");
+          if (cachedFb) setFeedback(JSON.parse(cachedFb));
+          else setFeedback([]);
+        } catch { setFeedback([]); }
+      }
     } catch (e) {
       setNotice(e.message);
       try {
         const cachedAdmin = localStorage.getItem("kumizhii_admin_posts");
         if (cachedAdmin) setPosts(JSON.parse(cachedAdmin));
+        const cachedFb = localStorage.getItem("kumizhii_admin_feedback");
+        if (cachedFb) setFeedback(JSON.parse(cachedFb));
       } catch {}
     }
   }
@@ -214,7 +230,13 @@ function App() {
     e.preventDefault(); setNotice("");
     try {
       await api("/api/feedback", { method: "POST", body: JSON.stringify({ name, message, postId: post?.id }) });
-      setMessage(""); setName(""); setNotice("Thank you — your note has been received.");
+      const newNote = { id: Date.now(), name: name || "Anonymous", message, post_title: post?.title || "General", created_at: new Date().toISOString().replace("T", " ").slice(0, 19) };
+      setFeedback(prev => {
+        const updated = [newNote, ...prev];
+        try { localStorage.setItem("kumizhii_admin_feedback", JSON.stringify(updated)); } catch {}
+        return updated;
+      });
+      setMessage(""); setName(""); setNotice("நன்றி! உங்களின் குறிப்பு பெறப்பட்டது. (Thank you — your note has been received.)");
     } catch (e) { setNotice(e.message); }
   }
   async function toggleAI(value) {
