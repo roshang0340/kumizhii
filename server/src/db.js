@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const isVercel = Boolean(process.env.VERCEL);
+const memoryFilePath = isVercel
+  ? "/tmp/kumizhii_db.json"
+  : path.resolve(here, "../data/kumizhii_db.json");
 
 class MemoryDb {
   constructor() {
@@ -13,6 +16,42 @@ class MemoryDb {
     this.settings = new Map([["ai_enabled", "false"]]);
     this.nextPostId = 1;
     this.nextFeedbackId = 1;
+    this.loadFromFile();
+  }
+
+  loadFromFile() {
+    try {
+      if (fs.existsSync(memoryFilePath)) {
+        const raw = fs.readFileSync(memoryFilePath, "utf-8");
+        const data = JSON.parse(raw);
+        if (Array.isArray(data.posts)) this.posts = data.posts;
+        if (Array.isArray(data.feedback)) this.feedback = data.feedback;
+        if (data.settings && typeof data.settings === "object") {
+          for (const [k, v] of Object.entries(data.settings)) {
+            this.settings.set(k, String(v));
+          }
+        }
+        if (typeof data.nextPostId === "number") this.nextPostId = data.nextPostId;
+        if (typeof data.nextFeedbackId === "number") this.nextFeedbackId = data.nextFeedbackId;
+      }
+    } catch (e) {
+      console.error("Failed to load memory db file:", e);
+    }
+  }
+
+  saveToFile() {
+    try {
+      const data = {
+        posts: this.posts,
+        feedback: this.feedback,
+        settings: Object.fromEntries(this.settings.entries()),
+        nextPostId: this.nextPostId,
+        nextFeedbackId: this.nextFeedbackId
+      };
+      fs.writeFileSync(memoryFilePath, JSON.stringify(data), "utf-8");
+    } catch (e) {
+      console.error("Failed to save memory db file:", e);
+    }
   }
 
   async execute(input) {
@@ -31,6 +70,7 @@ class MemoryDb {
 
     if (normalized.includes("into settings") || normalized.includes("settings")) {
       if (args.length > 0) this.settings.set("ai_enabled", String(args[0]));
+      this.saveToFile();
       return { rows: [], rowsAffected: 1 };
     }
 
@@ -76,6 +116,7 @@ class MemoryDb {
         updated_at: now
       };
       this.posts.push(newPost);
+      this.saveToFile();
       return { rows: [], rowsAffected: 1, lastInsertRowid: BigInt(newPost.id) };
     }
 
@@ -87,6 +128,7 @@ class MemoryDb {
           post.status = "published";
           if (!post.publish_date) post.publish_date = new Date().toISOString().slice(0, 10);
           post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
+          this.saveToFile();
           return { rows: [], rowsAffected: 1 };
         }
         return { rows: [], rowsAffected: 0 };
@@ -97,6 +139,7 @@ class MemoryDb {
         if (post) {
           post.status = "draft";
           post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
+          this.saveToFile();
           return { rows: [], rowsAffected: 1 };
         }
         return { rows: [], rowsAffected: 0 };
@@ -111,6 +154,7 @@ class MemoryDb {
         post.audio_url = String(audio_url || "");
         if (publish_date) post.publish_date = publish_date;
         post.updated_at = new Date().toISOString().replace("T", " ").slice(0, 19);
+        this.saveToFile();
         return { rows: [], rowsAffected: 1 };
       }
       return { rows: [], rowsAffected: 0 };
@@ -121,6 +165,7 @@ class MemoryDb {
       const idx = this.posts.findIndex(p => p.id === id);
       if (idx !== -1) {
         this.posts.splice(idx, 1);
+        this.saveToFile();
         return { rows: [], rowsAffected: 1 };
       }
       return { rows: [], rowsAffected: 0 };
@@ -136,6 +181,7 @@ class MemoryDb {
         created_at: new Date().toISOString().replace("T", " ").slice(0, 19)
       };
       this.feedback.push(newFb);
+      this.saveToFile();
       return { rows: [], rowsAffected: 1, lastInsertRowid: BigInt(newFb.id) };
     }
 
