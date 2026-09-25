@@ -163,8 +163,7 @@ class SafeDbClient {
     const authToken = process.env.TURSO_AUTH_TOKEN;
     if (url) {
       try {
-        const httpUrl = url.startsWith("libsql://") ? url.replace("libsql://", "https://") : url;
-        this.primaryDb = createClient({ url: httpUrl, authToken: authToken || undefined });
+        this.primaryDb = createClient({ url, authToken: authToken || undefined });
       } catch (e) {
         console.error("Failed to initialize Turso client, falling back to MemoryDb:", e);
       }
