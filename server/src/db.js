@@ -324,6 +324,28 @@ export async function initDb() {
       INSERT OR IGNORE INTO settings(key, value) VALUES ('ai_enabled', 'false');
     `);
 
+    try {
+      const existing = await db.execute("SELECT COUNT(*) AS cnt FROM posts");
+      const count = Number(existing.rows[0]?.cnt ?? existing.rows[0]?.['COUNT(*)'] ?? 0);
+      if (count === 0) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        await db.execute({
+          sql: `INSERT INTO posts(title, content, type, image_url, audio_url, status, publish_date)
+                VALUES(?, ?, ?, ?, ?, 'published', ?)`,
+          args: [
+            "ஒவ்வொரு நாளுக்கும் ஒரு சிறிய உணர்வு.",
+            "ஒரு கதை, ஒரு கவிதை, ஒரு சிந்தனை — நாளை கொஞ்சம் அழகாக்கும் ஒரு வரி. குமிழி தளத்திற்கு உங்களை அன்போடு வரவேற்கிறோம்!",
+            "Thought",
+            "/archive-illustration.jpeg",
+            "",
+            todayStr
+          ]
+        });
+      }
+    } catch (seedErr) {
+      console.error("Seed post insertion error:", seedErr);
+    }
+
     isInitialized = true;
   } catch (err) {
     console.error("Failed to initialize database tables:", err);

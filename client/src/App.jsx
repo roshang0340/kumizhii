@@ -89,39 +89,12 @@ function App() {
         setPost(fetchedToday);
         try { localStorage.setItem("kumizhii_today_post", JSON.stringify(fetchedToday)); } catch {}
       } else {
-        try {
-          const cached = localStorage.getItem("kumizhii_today_post");
-          if (cached) {
-            setPost(JSON.parse(cached));
-          } else {
-            const adminCached = localStorage.getItem("kumizhii_admin_posts");
-            if (adminCached) {
-              const parsedAdmin = JSON.parse(adminCached);
-              const pub = parsedAdmin.find(x => x.status === "published");
-              if (pub) setPost(pub);
-              else setPost(null);
-            } else setPost(null);
-          }
-        } catch { setPost(null); }
+        setPost(null);
+        try { localStorage.removeItem("kumizhii_today_post"); } catch {}
       }
-      if (Array.isArray(fetchedArchive) && fetchedArchive.length > 0) {
+      if (Array.isArray(fetchedArchive)) {
         setArchive(fetchedArchive);
         try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(fetchedArchive)); } catch {}
-      } else {
-        try {
-          const cachedArch = localStorage.getItem("kumizhii_archive_posts");
-          if (cachedArch) {
-            const parsedArch = JSON.parse(cachedArch);
-            if (parsedArch && parsedArch.length > 0) setArchive(parsedArch);
-          } else {
-            const adminCached = localStorage.getItem("kumizhii_admin_posts");
-            if (adminCached) {
-              const parsedAdmin = JSON.parse(adminCached);
-              const pubList = parsedAdmin.filter(x => x.status === "published");
-              if (pubList.length > 0) setArchive(pubList);
-            }
-          }
-        } catch {}
       }
     } catch {
       try {
@@ -136,51 +109,62 @@ function App() {
     if (!t) return;
     try {
       const h = { Authorization: `Bearer ${t}` };
-      const [p, s, f] = await Promise.all([
+      const [pRes, s, f] = await Promise.all([
         fetch(`${API}/api/admin/posts`, { headers: h }).then(r => r.json()),
         fetch(`${API}/api/admin/settings`, { headers: h }).then(r => r.json()),
         fetch(`${API}/api/admin/feedback`, { headers: h }).then(r => r.json())
       ]);
-      if (Array.isArray(p) && p.length > 0) {
-        setPosts(p);
-        try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(p)); } catch {}
-        const pubList = p.filter(x => x.status === "published");
-        if (pubList.length > 0) {
-          setArchive(pubList);
-          try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
-          setPost(pubList[0]);
-          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
+      let p = Array.isArray(pRes) ? pRes : [];
+      
+      // Auto-migrate any local drafts/posts into Turso Cloud DB if server was recently connected
+      try {
+        const localRaw = localStorage.getItem("kumizhii_admin_posts");
+        const localPosts = localRaw ? JSON.parse(localRaw) : [];
+        let migratedAny = false;
+        for (const lp of localPosts) {
+          if (lp && lp.title && lp.content && !p.some(srv => srv.title === lp.title)) {
+            const created = await api("/api/admin/posts", {
+              method: "POST",
+              body: JSON.stringify({
+                title: lp.title,
+                content: lp.content,
+                type: lp.type || "Thought",
+                publishDate: lp.publish_date || today,
+                imageUrl: lp.image_url || "",
+                audioUrl: lp.audio_url || ""
+              })
+            });
+            if (lp.status === "published" && created && created.id) {
+              await api(`/api/admin/posts/${created.id}/publish`, { method: "POST" });
+            }
+            migratedAny = true;
+          }
         }
-      } else if (Array.isArray(p)) {
-        try {
-          const cached = localStorage.getItem("kumizhii_admin_posts");
-          const parsed = cached ? JSON.parse(cached) : [];
-          if (parsed && parsed.length > 0) {
-            setPosts(parsed);
-            const pubList = parsed.filter(x => x.status === "published");
-            if (pubList.length > 0) setArchive(pubList);
-          } else setPosts([]);
-        } catch { setPosts([]); }
+        if (migratedAny) {
+          const freshP = await fetch(`${API}/api/admin/posts`, { headers: h }).then(r => r.json());
+          if (Array.isArray(freshP)) p = freshP;
+        }
+      } catch (migrErr) {
+        console.error("Local post sync error:", migrErr);
       }
-      if (typeof s.aiEnabled === "boolean") setAiEnabled(s.aiEnabled);
-      if (Array.isArray(f) && f.length > 0) {
+
+      setPosts(p);
+      try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(p)); } catch {}
+      const pubList = p.filter(x => x.status === "published");
+      setArchive(pubList);
+      try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
+      if (pubList[0]) {
+        setPost(pubList[0]);
+        try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
+      }
+
+      if (typeof s?.aiEnabled === "boolean") setAiEnabled(s.aiEnabled);
+      if (Array.isArray(f)) {
         setFeedback(f);
         try { localStorage.setItem("kumizhii_admin_feedback", JSON.stringify(f)); } catch {}
-      } else if (Array.isArray(f)) {
-        try {
-          const cachedFb = localStorage.getItem("kumizhii_admin_feedback");
-          if (cachedFb) setFeedback(JSON.parse(cachedFb));
-          else setFeedback([]);
-        } catch { setFeedback([]); }
       }
     } catch (e) {
       setNotice(e.message);
-      try {
-        const cachedAdmin = localStorage.getItem("kumizhii_admin_posts");
-        if (cachedAdmin) setPosts(JSON.parse(cachedAdmin));
-        const cachedFb = localStorage.getItem("kumizhii_admin_feedback");
-        if (cachedFb) setFeedback(JSON.parse(cachedFb));
-      } catch {}
     }
   }
   useEffect(() => { loadPublic(); checkDb(); }, []);
@@ -197,34 +181,25 @@ function App() {
     setBusy(true); setNotice("");
     try {
       const body = { title, content, type, publishDate, imageUrl, audioUrl };
-      const p = editing
-        ? await api(`/api/admin/posts/${editing}`, { method: "PUT", body: JSON.stringify(body) })
-        : await api("/api/admin/posts", { method: "POST", body: JSON.stringify(body) });
-      const publishedObj = { id: p.id, title, content, type, image_url: imageUrl, audio_url: audioUrl, status: publish ? "published" : (editing ? (posts.find(x => x.id === editing)?.status || "draft") : "draft"), publish_date: publishDate, created_at: new Date().toISOString() };
-      if (publish) {
+      let p;
+      if (editing) {
+        try {
+          p = await api(`/api/admin/posts/${editing}`, { method: "PUT", body: JSON.stringify(body) });
+        } catch (e) {
+          p = await api("/api/admin/posts", { method: "POST", body: JSON.stringify(body) });
+        }
+      } else {
+        p = await api("/api/admin/posts", { method: "POST", body: JSON.stringify(body) });
+      }
+
+      if (publish && p && p.id) {
         await api(`/api/admin/posts/${p.id}/publish`, { method: "POST" });
       }
-      setPosts(prev => {
-        const idx = prev.findIndex(x => x.id === p.id);
-        let newArr;
-        if (idx !== -1) {
-          newArr = [...prev];
-          newArr[idx] = { ...newArr[idx], ...publishedObj };
-        } else {
-          newArr = [publishedObj, ...prev];
-        }
-        try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(newArr)); } catch {}
-        const pubList = newArr.filter(x => x.status === "published");
-        setArchive(pubList);
-        try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
-        if (pubList[0]) {
-          setPost(pubList[0]);
-          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
-        }
-        return newArr;
-      });
-      setNotice(publish ? "Published successfully." : "Draft saved.");
-      await loadAdmin(); await loadPublic(); setPage("admin");
+
+      setNotice(publish ? "பதிவு நேரலையில் வெளியிடப்பட்டது! (Published to users live!)" : "வரைவு சேமிக்கப்பட்டது (Draft saved).");
+      await loadAdmin();
+      await loadPublic();
+      setPage("admin");
     } catch (e) { setNotice(e.message); }
     finally { setBusy(false); }
   }
@@ -280,41 +255,42 @@ function App() {
   async function publishToggle(p) {
     const isPublishing = p.status !== "published";
     if (isPublishing && !window.confirm(`"${p.title}" பதிவை வெளியிட விரும்புகிறீர்களா? (Are you sure you want to publish this entry?)`)) return;
+    setBusy(true); setNotice("");
     try {
-      await api(`/api/admin/posts/${p.id}/${p.status === "published" ? "unpublish" : "publish"}`, { method: "POST" });
-      const newStatus = p.status === "published" ? "draft" : "published";
-      setPosts(prev => {
-        const newArr = prev.map(item => item.id === p.id ? { ...item, status: newStatus } : item);
-        try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(newArr)); } catch {}
-        const pubList = newArr.filter(x => x.status === "published");
-        setArchive(pubList);
-        try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
-        if (pubList[0]) {
-          setPost(pubList[0]);
-          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
+      const endpoint = p.status === "published" ? "unpublish" : "publish";
+      try {
+        await api(`/api/admin/posts/${p.id}/${endpoint}`, { method: "POST" });
+      } catch (err) {
+        if (err.message?.includes("not found")) {
+          const created = await api("/api/admin/posts", {
+            method: "POST",
+            body: JSON.stringify({
+              title: p.title,
+              content: p.content,
+              type: p.type,
+              publishDate: p.publish_date || today,
+              imageUrl: p.image_url || "",
+              audioUrl: p.audio_url || ""
+            })
+          });
+          if (isPublishing) {
+            await api(`/api/admin/posts/${created.id}/publish`, { method: "POST" });
+          }
+        } else {
+          throw err;
         }
-        return newArr;
-      });
-      await loadAdmin(); await loadPublic();
+      }
+      setNotice(isPublishing ? "பதிவு நேரலையில் வெளியிடப்பட்டது! (Published to users live!)" : "பதிவு மறைக்கப்பட்டது (Unpublished)");
+      await loadAdmin();
+      await loadPublic();
     } catch (e) { setNotice(e.message); }
+    finally { setBusy(false); }
   }
   async function deletePost(p) {
     if (!window.confirm(`Delete "${p.title}" permanently?`)) return;
     try {
       await api(`/api/admin/posts/${p.id}`, { method: "DELETE" });
       setNotice("Entry deleted.");
-      setPosts(prev => {
-        const newArr = prev.filter(item => item.id !== p.id);
-        try { localStorage.setItem("kumizhii_admin_posts", JSON.stringify(newArr)); } catch {}
-        const pubList = newArr.filter(x => x.status === "published");
-        setArchive(pubList);
-        try { localStorage.setItem("kumizhii_archive_posts", JSON.stringify(pubList)); } catch {}
-        if (pubList[0]) {
-          setPost(pubList[0]);
-          try { localStorage.setItem("kumizhii_today_post", JSON.stringify(pubList[0])); } catch {}
-        }
-        return newArr;
-      });
       await loadAdmin(); await loadPublic();
     } catch (e) { setNotice(e.message); }
   }
