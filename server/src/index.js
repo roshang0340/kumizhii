@@ -266,27 +266,53 @@ app.get("/api/admin/test-ai", adminOnly, async (_req, res) => {
 
     if (geminiKey) {
       try {
+        let discoveredModels = [];
         const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`);
         const listData = await listRes.json();
         if (listRes.ok && Array.isArray(listData.models)) {
-          const validModels = listData.models
+          discoveredModels = listData.models
             .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
             .map(m => m.name.replace("models/", ""));
-          
-          const testModel = validModels[0] || "gemini-1.5-flash";
-          const genRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${geminiKey}`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ parts: [{ text: "வணக்கம்" }] }] })
-          });
-          const genData = await genRes.json();
-          if (genRes.ok && genData.candidates?.[0]?.content?.parts) {
-            report.ok = true;
-            report.providers.push({ provider: "Google AI Studio (Gemini)", active: true, workingModel: testModel, availableModels: validModels });
-          } else {
-            report.providers.push({ provider: "Google AI Studio (Gemini)", active: false, error: genData.error?.message || "Generation test failed", availableModels: validModels });
+        }
+
+        const candidateModels = Array.from(new Set([
+          "gemini-3.8-flash",
+          "gemini-2.0-flash",
+          "gemini-1.5-flash",
+          "gemini-1.5-flash-latest",
+          "gemini-2.0-flash-lite",
+          "gemini-1.5-flash-8b",
+          "gemini-1.5-pro",
+          "gemini-1.0-pro",
+          ...discoveredModels
+        ])).filter(m => m && !m.includes("2.5-flash"));
+
+        let workingModel = null;
+        let lastModelError = "";
+
+        for (const model of candidateModels) {
+          try {
+            const genRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ contents: [{ parts: [{ text: "வணக்கம்" }] }] })
+            });
+            const genData = await genRes.json();
+            if (genRes.ok && genData.candidates?.[0]?.content?.parts) {
+              workingModel = model;
+              break;
+            } else if (genData.error?.message) {
+              lastModelError = `${model}: ${genData.error.message}`;
+            }
+          } catch (err) {
+            lastModelError = `${model}: ${err.message}`;
           }
+        }
+
+        if (workingModel) {
+          report.ok = true;
+          report.providers.push({ provider: "Google AI Studio (Gemini)", active: true, workingModel, availableModels: candidateModels });
         } else {
-          report.providers.push({ provider: "Google AI Studio (Gemini)", active: false, error: listData.error?.message || "API Key invalid or quota exceeded" });
+          report.providers.push({ provider: "Google AI Studio (Gemini)", active: false, error: lastModelError || "No working Gemini model found", availableModels: candidateModels });
         }
       } catch (err) {
         report.providers.push({ provider: "Google AI Studio (Gemini)", active: false, error: err.message });
@@ -370,7 +396,7 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
       }
 
       const candidateModels = Array.from(new Set([
-        ...discoveredModels,
+        "gemini-3.8-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
         "gemini-1.5-flash-latest",
@@ -378,8 +404,8 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
         "gemini-1.5-flash-8b",
         "gemini-1.5-pro",
         "gemini-1.0-pro",
-        process.env.GEMINI_MODEL
-      ])).filter(Boolean);
+        ...discoveredModels
+      ])).filter(m => m && !m.includes("2.5-flash"));
 
       for (const model of candidateModels) {
         try {
