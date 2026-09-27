@@ -79,7 +79,14 @@ function App() {
   async function api(path, options = {}) {
     const r = await fetch(`${API}${path}`, { ...options, headers: { ...headers, ...(options.headers || {}) } });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || "Something went wrong.");
+    if (!r.ok) {
+      if (r.status === 401 && token) {
+        setToken("");
+        setPage("login");
+        setNotice("Google sign-in session expired. Please sign in with Google again.");
+      }
+      throw new Error(data.error || "Something went wrong.");
+    }
     return data;
   }
   async function loadPublic() {

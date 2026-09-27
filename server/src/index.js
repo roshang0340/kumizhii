@@ -35,8 +35,8 @@ async function adminOnly(req, res, next) {
   try {
     const auth = req.headers.authorization || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const clientId = (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+    const adminEmail = (process.env.ADMIN_EMAIL || "").trim();
     if (!token || !clientId || !adminEmail) {
       return res.status(401).json({ error: "Admin sign-in is not configured." });
     }
@@ -44,12 +44,12 @@ async function adminOnly(req, res, next) {
     const ticket = await oauth.verifyIdToken({ idToken: token, audience: clientId });
     const payload = ticket.getPayload();
     if (!payload?.email_verified || payload.email?.toLowerCase() !== adminEmail.toLowerCase()) {
-      return res.status(403).json({ error: "This Google account is not the configured admin." });
+      return res.status(403).json({ error: `Signed-in Google account (${payload?.email || "unknown"}) does not match configured admin.` });
     }
     req.adminEmail = payload.email;
     next();
   } catch (err) {
-    res.status(401).json({ error: "Invalid or expired Google sign-in. Please sign in again." });
+    res.status(401).json({ error: "Google sign-in token expired or invalid. Please sign in again." });
   }
 }
 
@@ -292,7 +292,7 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
     }
 
     if (!text && geminiKey) {
-      const models = [process.env.GEMINI_MODEL, "gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"].filter(Boolean);
+      const models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-2.0-flash", "gemini-1.0-pro", process.env.GEMINI_MODEL].filter(Boolean);
       for (const model of models) {
         try {
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
