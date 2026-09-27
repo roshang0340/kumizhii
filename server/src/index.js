@@ -261,14 +261,16 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
     const enabled = setting.rows[0]?.value === "true";
     if (!enabled) return res.status(403).json({ error: "AI is OFF. Turn it on in Admin settings to generate content." });
     const openaiKey = process.env.OPENAI_API_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY || process.env.CHAT_GEMINI_API_KEY;
-    if (!openaiKey && !geminiKey) return res.status(503).json({ error: "Add OPENAI_API_KEY or GEMINI_API_KEY to Vercel Environment Variables." });
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.CHAT_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!openaiKey && !geminiKey) return res.status(503).json({ error: "Add OPENAI_API_KEY or GEMINI_API_KEY in Vercel Environment Variables." });
     const idea = String(req.body?.idea || "").trim();
     const type = String(req.body?.type || "Thought");
     if (!idea) return res.status(400).json({ error: "Enter a short idea first." });
     const prompt = `Write an original, natural-sounding Tamil ${type.toLowerCase()} for a daily journal based on this idea: ${idea}. Avoid clichés. Return only a short title on the first line, then the content.`;
     
     let text = "";
+    let lastError = "";
+
     if (openaiKey) {
       try {
         const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -280,26 +282,38 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
         const data = await response.json();
         if (response.ok && data.choices?.[0]?.message?.content) {
           text = data.choices[0].message.content.trim();
+        } else if (data.error?.message) {
+          lastError = `OpenAI: ${data.error.message}`;
         }
       } catch (err) {
+        lastError = `OpenAI network error: ${err.message}`;
         console.error("OpenAI error, falling back to Gemini:", err);
       }
     }
 
     if (!text && geminiKey) {
-      const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      const data = await response.json();
-      if (response.ok && data.candidates?.[0]?.content?.parts) {
-        text = data.candidates[0].content.parts.map(p => p.text || "").join("").trim();
+      const models = [process.env.GEMINI_MODEL, "gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"].filter(Boolean);
+      for (const model of models) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          });
+          const data = await response.json();
+          if (response.ok && data.candidates?.[0]?.content?.parts) {
+            text = data.candidates[0].content.parts.map(p => p.text || "").join("").trim();
+            if (text) break;
+          } else if (data.error?.message) {
+            lastError = `Gemini (${model}): ${data.error.message}`;
+          }
+        } catch (err) {
+          lastError = `Gemini network error: ${err.message}`;
+        }
       }
     }
 
     if (!text) {
-      return res.status(502).json({ error: "AI request failed. Check OPENAI_API_KEY / GEMINI_API_KEY in Vercel." });
+      return res.status(502).json({ error: lastError || "AI request failed. Please check OPENAI_API_KEY / GEMINI_API_KEY in Vercel Environment Variables." });
     }
 
     const newline = text.indexOf("\n");
