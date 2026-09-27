@@ -55,6 +55,7 @@ function App() {
     } catch { return []; }
   });
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiProvider, setAiProvider] = useState("auto");
   const [editing, setEditing] = useState(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -167,6 +168,7 @@ function App() {
       }
 
       if (typeof s?.aiEnabled === "boolean") setAiEnabled(s.aiEnabled);
+      if (s?.aiProvider) setAiProvider(s.aiProvider);
       if (Array.isArray(f)) {
         setFeedback(f);
         try { localStorage.setItem("kumizhii_admin_feedback", JSON.stringify(f)); } catch {}
@@ -238,7 +240,7 @@ function App() {
   async function generate() {
     setBusy(true); setNotice("");
     try {
-      const result = await api("/api/admin/generate", { method: "POST", body: JSON.stringify({ idea, type }) });
+      const result = await api("/api/admin/generate", { method: "POST", body: JSON.stringify({ idea, type, provider: aiProvider }) });
       setTitle(result.title); setContent(result.content); setNotice("AI draft generated. Review and edit before publishing.");
     } catch (e) { setNotice(e.message); }
     finally { setBusy(false); }
@@ -256,9 +258,12 @@ function App() {
       setMessage(""); setName(""); setNotice("நன்றி! உங்களின் குறிப்பு பெறப்பட்டது. (Thank you — your note has been received.)");
     } catch (e) { setNotice(e.message); }
   }
-  async function toggleAI(value) {
-    try { const s = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify({ aiEnabled: value }) }); setAiEnabled(s.aiEnabled); }
-    catch (e) { setNotice(e.message); }
+  async function updateAISettings(enabled = aiEnabled, provider = aiProvider) {
+    try {
+      const s = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify({ aiEnabled: enabled, aiProvider: provider }) });
+      if (typeof s.aiEnabled === "boolean") setAiEnabled(s.aiEnabled);
+      if (s.aiProvider) setAiProvider(s.aiProvider);
+    } catch (e) { setNotice(e.message); }
   }
   async function testAI() {
     setBusy(true); setNotice("Testing AI API key connection...");
@@ -490,15 +495,45 @@ function App() {
         {notice && <p className="notice">{notice}</p>}
         {page === "admin" && <>
           <div className="settings-strip"><div><Database size={18}/><div><strong>Database connection status</strong><small>{dbStatus?.message || "Checking database connection…"}</small></div></div><b style={{ color: dbStatus?.connected ? "#367b60" : "#9c7b3c" }}>{dbStatus?.engine ? dbStatus.engine.toUpperCase() : "CHECKING…"}</b></div>
-          <div className="settings-strip"><div><Sparkles size={18}/><div><strong>AI writing assistant</strong><small>Only called when you explicitly generate a draft.</small></div></div><button className="outline-button" onClick={testAI} disabled={busy} style={{ marginRight: 12, padding: "6px 12px", fontSize: 11 }}>Test AI Key</button><button className={`toggle ${aiEnabled ? "on" : ""}`} onClick={() => toggleAI(!aiEnabled)} aria-label="Toggle AI"><span/></button><b>{aiEnabled ? "ON" : "OFF"}</b></div>
+          <div className="settings-strip">
+            <div>
+              <Sparkles size={18}/>
+              <div>
+                <strong>AI writing assistant</strong>
+                <small>Only called when you explicitly generate a draft.</small>
+              </div>
+            </div>
+            <label style={{ margin: "0 10px", fontSize: 11, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontWeight: 600 }}>
+              Engine:
+              <select
+                value={aiProvider}
+                onChange={e => updateAISettings(aiEnabled, e.target.value)}
+                style={{ padding: "5px 9px", borderRadius: 6, border: "1px solid #cfc8b8", fontSize: 11, background: "#fffdf8", cursor: "pointer" }}
+              >
+                <option value="auto">Auto (Cascading Failover)</option>
+                <option value="gemini">Google Gemini AI</option>
+                <option value="openai">OpenAI (ChatGPT)</option>
+              </select>
+            </label>
+            <button className="outline-button" onClick={testAI} disabled={busy} style={{ marginRight: 8, padding: "5px 10px", fontSize: 11 }}>Test AI Key</button>
+            <button className={`toggle ${aiEnabled ? "on" : ""}`} onClick={() => updateAISettings(!aiEnabled, aiProvider)} aria-label="Toggle AI"><span/></button>
+            <b>{aiEnabled ? "ON" : "OFF"}</b>
+          </div>
           <div className="admin-actions"><button className="primary-button" onClick={() => { startNew(); setPage("editor"); }}><PenLine size={16}/> New entry</button><button className="outline-button" onClick={() => setPage("feedback")}><MessageCircle size={16}/> Reader notes ({feedback.length})</button></div>
           <div className="post-table">{posts.map(p => <div className="post-row" key={p.id}><div><span className={`status ${p.status}`}>{p.status}</span><strong>{p.title} {p.audio_url ? "🎧" : ""}</strong><small>{p.type} · {fmt(p.publish_date)}</small></div><button onClick={() => edit(p)}>Edit</button><button onClick={() => publishToggle(p)}>{p.status === "published" ? "Unpublish" : "Publish"}</button><button className="danger-button" onClick={() => deletePost(p)}>Delete</button></div>)}{!posts.length && <p className="muted">No entries yet. Create your first one.</p>}</div>
         </>}
         {page === "editor" && <div className="editor-layout">
           <section className="editor-form">
             <label>Content type<select value={type} onChange={e => setType(e.target.value)}><option>Thought</option><option>Poem</option><option>Story</option><option>Information</option></select></label>
+            <label>AI Provider Engine
+              <select value={aiProvider} onChange={e => setAiProvider(e.target.value)}>
+                <option value="auto">Auto (Gemini Pro/Flash ➡️ OpenAI Failover)</option>
+                <option value="gemini">Google Gemini AI (All Models)</option>
+                <option value="openai">OpenAI (ChatGPT)</option>
+              </select>
+            </label>
             <label>Short idea for AI (optional)<input value={idea} onChange={e => setIdea(e.target.value)} placeholder="e.g. learning to let go"/></label>
-            <button className="outline-button" disabled={!aiEnabled || !idea.trim() || busy} onClick={generate}><Sparkles size={16}/> Generate draft</button>
+            <button className="outline-button" disabled={!aiEnabled || !idea.trim() || busy} onClick={generate}><Sparkles size={16}/> Generate draft ({aiProvider === "gemini" ? "Google Gemini" : aiProvider === "openai" ? "OpenAI" : "Auto Failover"})</button>
             <label>Title<input value={title} onChange={e => setTitle(e.target.value)} placeholder="Give this entry a title" required/></label>
             <label>Your content<textarea className="content-input" value={content} onChange={e => setContent(e.target.value)} placeholder="Write something worth keeping…" required/></label>
             <label>Publish date<input type="date" value={publishDate} onChange={e => setPublishDate(e.target.value)}/></label>

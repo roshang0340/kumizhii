@@ -104,8 +104,14 @@ app.post("/api/feedback", async (req, res) => {
 
 app.get("/api/admin/settings", adminOnly, async (_req, res) => {
   try {
-    const result = await db.execute("SELECT value FROM settings WHERE key='ai_enabled'");
-    res.json({ aiEnabled: result.rows[0]?.value === "true" });
+    const [enabledRes, providerRes] = await Promise.all([
+      db.execute("SELECT value FROM settings WHERE key='ai_enabled'"),
+      db.execute("SELECT value FROM settings WHERE key='ai_provider'")
+    ]);
+    res.json({
+      aiEnabled: enabledRes.rows[0]?.value === "true",
+      aiProvider: providerRes.rows[0]?.value || "auto"
+    });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to fetch settings." });
   }
@@ -114,11 +120,18 @@ app.get("/api/admin/settings", adminOnly, async (_req, res) => {
 app.put("/api/admin/settings", adminOnly, async (req, res) => {
   try {
     const enabled = Boolean(req.body?.aiEnabled);
-    await db.execute({
-      sql: "INSERT OR REPLACE INTO settings(key,value) VALUES('ai_enabled',?)",
-      args: [String(enabled)]
-    });
-    res.json({ aiEnabled: enabled });
+    const provider = String(req.body?.aiProvider || "auto");
+    await Promise.all([
+      db.execute({
+        sql: "INSERT OR REPLACE INTO settings(key,value) VALUES('ai_enabled',?)",
+        args: [String(enabled)]
+      }),
+      db.execute({
+        sql: "INSERT OR REPLACE INTO settings(key,value) VALUES('ai_provider',?)",
+        args: [provider]
+      })
+    ]);
+    res.json({ aiEnabled: enabled, aiProvider: provider });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to update settings." });
   }
@@ -255,6 +268,44 @@ app.delete("/api/admin/posts/:id", adminOnly, async (req, res) => {
   }
 });
 
+async function getOrderedGeminiModels(geminiKey) {
+  const priorityList = [
+    "gemini-2.0-pro-exp-02-05",
+    "gemini-2.0-pro-exp",
+    "gemini-1.5-pro",
+    "gemini-1.5-pro-latest",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash-lite-preview-02-05",
+    "gemini-1.5-flash-8b",
+    "gemini-1.0-pro"
+  ];
+
+  let discovered = [];
+  if (geminiKey) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`);
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.models)) {
+        discovered = data.models
+          .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
+          .map(m => m.name.replace("models/", ""));
+      }
+    } catch (e) {
+      console.warn("Dynamic Google AI model fetch failed:", e.message);
+    }
+  }
+
+  return Array.from(new Set([
+    process.env.GEMINI_MODEL,
+    ...priorityList,
+    ...discovered
+  ])).filter(m => m && !m.includes("2.5-flash"));
+}
+
 app.get("/api/admin/test-ai", adminOnly, async (_req, res) => {
   try {
     const openaiKey = process.env.OPENAI_API_KEY;
@@ -266,27 +317,7 @@ app.get("/api/admin/test-ai", adminOnly, async (_req, res) => {
 
     if (geminiKey) {
       try {
-        let discoveredModels = [];
-        const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`);
-        const listData = await listRes.json();
-        if (listRes.ok && Array.isArray(listData.models)) {
-          discoveredModels = listData.models
-            .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
-            .map(m => m.name.replace("models/", ""));
-        }
-
-        const candidateModels = Array.from(new Set([
-          "gemini-3.8-flash",
-          "gemini-2.0-flash",
-          "gemini-1.5-flash",
-          "gemini-1.5-flash-latest",
-          "gemini-2.0-flash-lite",
-          "gemini-1.5-flash-8b",
-          "gemini-1.5-pro",
-          "gemini-1.0-pro",
-          ...discoveredModels
-        ])).filter(m => m && !m.includes("2.5-flash"));
-
+        const candidateModels = await getOrderedGeminiModels(geminiKey);
         let workingModel = null;
         let lastModelError = "";
 
@@ -350,9 +381,14 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
     const setting = await db.execute("SELECT value FROM settings WHERE key='ai_enabled'");
     const enabled = setting.rows[0]?.value === "true";
     if (!enabled) return res.status(403).json({ error: "AI is OFF. Turn it on in Admin settings to generate content." });
+    
+    const dbProviderSetting = await db.execute("SELECT value FROM settings WHERE key='ai_provider'");
+    const preferredProvider = String(req.body?.provider || dbProviderSetting.rows[0]?.value || "auto");
+
     const openaiKey = process.env.OPENAI_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY || process.env.CHAT_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!openaiKey && !geminiKey) return res.status(503).json({ error: "Add OPENAI_API_KEY or GEMINI_API_KEY in Vercel Environment Variables." });
+
     const idea = String(req.body?.idea || "").trim();
     const type = String(req.body?.type || "Thought");
     if (!idea) return res.status(400).json({ error: "Enter a short idea first." });
@@ -361,7 +397,35 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
     let text = "";
     let lastError = "";
 
-    if (openaiKey) {
+    const tryGemini = async () => {
+      if (!geminiKey) return false;
+      const candidateModels = await getOrderedGeminiModels(geminiKey);
+      for (const model of candidateModels) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          });
+          const data = await response.json();
+          if (response.ok && data.candidates?.[0]?.content?.parts) {
+            const resultText = data.candidates[0].content.parts.map(p => p.text || "").join("").trim();
+            if (resultText) {
+              text = resultText;
+              return true;
+            }
+          } else if (data.error?.message) {
+            lastError = `Gemini (${model}): ${data.error.message}`;
+            console.warn(`Model ${model} limit/error reached, cascading to next model...`);
+          }
+        } catch (err) {
+          lastError = `Gemini (${model}) network error: ${err.message}`;
+        }
+      }
+      return false;
+    };
+
+    const tryOpenAI = async () => {
+      if (!openaiKey) return false;
       try {
         const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
         const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -372,58 +436,23 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
         const data = await response.json();
         if (response.ok && data.choices?.[0]?.message?.content) {
           text = data.choices[0].message.content.trim();
+          return true;
         } else if (data.error?.message) {
           lastError = `OpenAI: ${data.error.message}`;
         }
       } catch (err) {
         lastError = `OpenAI network error: ${err.message}`;
-        console.error("OpenAI error, falling back to Gemini:", err);
       }
-    }
+      return false;
+    };
 
-    if (!text && geminiKey) {
-      let discoveredModels = [];
-      try {
-        const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`);
-        const listData = await listRes.json();
-        if (listRes.ok && Array.isArray(listData.models)) {
-          discoveredModels = listData.models
-            .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
-            .map(m => m.name.replace("models/", ""));
-        }
-      } catch (e) {
-        console.warn("Could not list Google AI Studio models dynamically:", e.message);
-      }
-
-      const candidateModels = Array.from(new Set([
-        "gemini-3.8-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-pro",
-        "gemini-1.0-pro",
-        ...discoveredModels
-      ])).filter(m => m && !m.includes("2.5-flash"));
-
-      for (const model of candidateModels) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-          });
-          const data = await response.json();
-          if (response.ok && data.candidates?.[0]?.content?.parts) {
-            text = data.candidates[0].content.parts.map(p => p.text || "").join("").trim();
-            if (text) break;
-          } else if (data.error?.message) {
-            lastError = `Gemini (${model}): ${data.error.message}`;
-          }
-        } catch (err) {
-          lastError = `Gemini (${model}) network error: ${err.message}`;
-        }
-      }
+    if (preferredProvider === "gemini") {
+      await tryGemini();
+    } else if (preferredProvider === "openai") {
+      await tryOpenAI();
+    } else {
+      const ok = await tryGemini();
+      if (!ok) await tryOpenAI();
     }
 
     if (!text) {

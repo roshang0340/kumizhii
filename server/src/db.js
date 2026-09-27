@@ -324,6 +324,10 @@ export async function initDb() {
       INSERT OR IGNORE INTO settings(key, value) VALUES ('ai_enabled', 'false');
     `);
 
+    await db.execute(`
+      INSERT OR IGNORE INTO settings(key, value) VALUES ('ai_provider', 'auto');
+    `);
+
     try {
       const existing = await db.execute("SELECT COUNT(*) AS cnt FROM posts");
       const count = Number(existing.rows[0]?.cnt ?? existing.rows[0]?.['COUNT(*)'] ?? 0);
