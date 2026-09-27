@@ -260,6 +260,24 @@ function App() {
     try { const s = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify({ aiEnabled: value }) }); setAiEnabled(s.aiEnabled); }
     catch (e) { setNotice(e.message); }
   }
+  async function testAI() {
+    setBusy(true); setNotice("Testing AI API key connection...");
+    try {
+      const res = await api("/api/admin/test-ai");
+      if (res.ok) {
+        const prov = res.providers.find(p => p.active);
+        const modelsMsg = prov?.availableModels ? ` (Found ${prov.availableModels.length} models: ${prov.availableModels.slice(0, 3).join(", ")})` : "";
+        setNotice(`AI API Key Working! Active Model: ${prov?.workingModel || "Gemini"}${modelsMsg}`);
+      } else {
+        const err = res.providers?.[0]?.error || res.error || "Connection failed";
+        setNotice(`AI Test Result: ${err}`);
+      }
+    } catch (e) {
+      setNotice(`AI Test Error: ${e.message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function publishToggle(p) {
     const isPublishing = p.status !== "published";
     if (isPublishing && !window.confirm(`"${p.title}" பதிவை வெளியிட விரும்புகிறீர்களா? (Are you sure you want to publish this entry?)`)) return;
@@ -472,7 +490,7 @@ function App() {
         {notice && <p className="notice">{notice}</p>}
         {page === "admin" && <>
           <div className="settings-strip"><div><Database size={18}/><div><strong>Database connection status</strong><small>{dbStatus?.message || "Checking database connection…"}</small></div></div><b style={{ color: dbStatus?.connected ? "#367b60" : "#9c7b3c" }}>{dbStatus?.engine ? dbStatus.engine.toUpperCase() : "CHECKING…"}</b></div>
-          <div className="settings-strip"><div><Sparkles size={18}/><div><strong>AI writing assistant</strong><small>Only called when you explicitly generate a draft.</small></div></div><button className={`toggle ${aiEnabled ? "on" : ""}`} onClick={() => toggleAI(!aiEnabled)} aria-label="Toggle AI"><span/></button><b>{aiEnabled ? "ON" : "OFF"}</b></div>
+          <div className="settings-strip"><div><Sparkles size={18}/><div><strong>AI writing assistant</strong><small>Only called when you explicitly generate a draft.</small></div></div><button className="outline-button" onClick={testAI} disabled={busy} style={{ marginRight: 12, padding: "6px 12px", fontSize: 11 }}>Test AI Key</button><button className={`toggle ${aiEnabled ? "on" : ""}`} onClick={() => toggleAI(!aiEnabled)} aria-label="Toggle AI"><span/></button><b>{aiEnabled ? "ON" : "OFF"}</b></div>
           <div className="admin-actions"><button className="primary-button" onClick={() => { startNew(); setPage("editor"); }}><PenLine size={16}/> New entry</button><button className="outline-button" onClick={() => setPage("feedback")}><MessageCircle size={16}/> Reader notes ({feedback.length})</button></div>
           <div className="post-table">{posts.map(p => <div className="post-row" key={p.id}><div><span className={`status ${p.status}`}>{p.status}</span><strong>{p.title} {p.audio_url ? "🎧" : ""}</strong><small>{p.type} · {fmt(p.publish_date)}</small></div><button onClick={() => edit(p)}>Edit</button><button onClick={() => publishToggle(p)}>{p.status === "published" ? "Unpublish" : "Publish"}</button><button className="danger-button" onClick={() => deletePost(p)}>Delete</button></div>)}{!posts.length && <p className="muted">No entries yet. Create your first one.</p>}</div>
         </>}

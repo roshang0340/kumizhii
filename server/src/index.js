@@ -255,6 +255,70 @@ app.delete("/api/admin/posts/:id", adminOnly, async (req, res) => {
   }
 });
 
+app.get("/api/admin/test-ai", adminOnly, async (_req, res) => {
+  try {
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.CHAT_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!openaiKey && !geminiKey) {
+      return res.status(503).json({ ok: false, error: "No OPENAI_API_KEY or GEMINI_API_KEY configured in Vercel." });
+    }
+    const report = { ok: false, providers: [] };
+
+    if (geminiKey) {
+      try {
+        const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`);
+        const listData = await listRes.json();
+        if (listRes.ok && Array.isArray(listData.models)) {
+          const validModels = listData.models
+            .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
+            .map(m => m.name.replace("models/", ""));
+          
+          const testModel = validModels[0] || "gemini-1.5-flash";
+          const genRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${geminiKey}`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: [{ text: "வணக்கம்" }] }] })
+          });
+          const genData = await genRes.json();
+          if (genRes.ok && genData.candidates?.[0]?.content?.parts) {
+            report.ok = true;
+            report.providers.push({ provider: "Google AI Studio (Gemini)", active: true, workingModel: testModel, availableModels: validModels });
+          } else {
+            report.providers.push({ provider: "Google AI Studio (Gemini)", active: false, error: genData.error?.message || "Generation test failed", availableModels: validModels });
+          }
+        } else {
+          report.providers.push({ provider: "Google AI Studio (Gemini)", active: false, error: listData.error?.message || "API Key invalid or quota exceeded" });
+        }
+      } catch (err) {
+        report.providers.push({ provider: "Google AI Studio (Gemini)", active: false, error: err.message });
+      }
+    }
+
+    if (openaiKey) {
+      try {
+        const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: "Hi" }], max_tokens: 5 })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          report.ok = true;
+          report.providers.push({ provider: "OpenAI", active: true, workingModel: model });
+        } else {
+          report.providers.push({ provider: "OpenAI", active: false, error: data.error?.message });
+        }
+      } catch (err) {
+        report.providers.push({ provider: "OpenAI", active: false, error: err.message });
+      }
+    }
+
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post("/api/admin/generate", adminOnly, async (req, res) => {
   try {
     const setting = await db.execute("SELECT value FROM settings WHERE key='ai_enabled'");
@@ -292,8 +356,32 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
     }
 
     if (!text && geminiKey) {
-      const models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-2.0-flash", "gemini-1.0-pro", process.env.GEMINI_MODEL].filter(Boolean);
-      for (const model of models) {
+      let discoveredModels = [];
+      try {
+        const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`);
+        const listData = await listRes.json();
+        if (listRes.ok && Array.isArray(listData.models)) {
+          discoveredModels = listData.models
+            .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
+            .map(m => m.name.replace("models/", ""));
+        }
+      } catch (e) {
+        console.warn("Could not list Google AI Studio models dynamically:", e.message);
+      }
+
+      const candidateModels = Array.from(new Set([
+        ...discoveredModels,
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro",
+        process.env.GEMINI_MODEL
+      ])).filter(Boolean);
+
+      for (const model of candidateModels) {
         try {
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
             method: "POST", headers: { "Content-Type": "application/json" },
@@ -307,7 +395,7 @@ app.post("/api/admin/generate", adminOnly, async (req, res) => {
             lastError = `Gemini (${model}): ${data.error.message}`;
           }
         } catch (err) {
-          lastError = `Gemini network error: ${err.message}`;
+          lastError = `Gemini (${model}) network error: ${err.message}`;
         }
       }
     }
